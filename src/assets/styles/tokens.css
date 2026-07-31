@@ -1,0 +1,62 @@
+/* ============================================================
+   Design tokens — WEB 360 de Calidad
+   Verde institucional FIME como color primario.
+   >>> Para ajustar al verde EXACTO de la facultad, cambie
+       únicamente las variables --brand-* de este archivo. <<<
+   ============================================================ */
+:root {
+  /* Verde FIME (primario) */
+  --brand-900: #0f3d24;
+  --brand-800: #14532d;
+  --brand-700: #1b7a43;
+  --brand-600: #1f8a4c;
+  --brand-500: #2e9e59;
+  --brand-400: #57b877;
+  --brand-200: #b7e0c4;
+  --brand-100: #e6f4ea;
+
+  /* Acento dorado (UANL), uso puntual */
+  --accent-600: #b8860b;
+  --accent-100: #fdf3d8;
+
+  /* Neutros */
+  --gray-900: #1a2229;
+  --gray-700: #3d4852;
+  --gray-500: #6b7681;
+  --gray-400: #97a1ab;
+  --gray-300: #d6dce2;
+  --gray-200: #e8ecf0;
+  --gray-100: #f2f5f8;
+  --gray-50:  #f8fafb;
+  --white:    #ffffff;
+
+  /* Estados */
+  --ok:      #1f8a4c;
+  --ok-bg:   #e6f4ea;
+  --warn:    #b8860b;
+  --warn-bg: #fdf3d8;
+  --danger:  #c0392b;
+  --danger-bg:#fbeae8;
+  --info:    #2d6cb8;
+  --info-bg: #e7effa;
+
+  /* Superficies y bordes */
+  --surface:    var(--white);
+  --bg:         var(--gray-100);
+  --border:     var(--gray-300);
+  --border-soft:var(--gray-200);
+
+  /* Tipografía */
+  --font: 'Segoe UI', system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+
+  /* Sombra y radios */
+  --shadow-sm: 0 1px 2px rgba(16, 40, 28, 0.06);
+  --shadow:    0 2px 8px rgba(16, 40, 28, 0.08);
+  --shadow-md: 0 6px 20px rgba(16, 40, 28, 0.12);
+  --radius:    10px;
+  --radius-sm: 6px;
+
+  /* Layout */
+  --sidebar-w: 248px;
+  --topbar-h:  60px;
+}

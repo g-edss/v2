@@ -1,0 +1,36 @@
+# ============================================================
+#  Entorno local de WEB 360 de Calidad
+#  Levanta PostgreSQL + Adminer (visor web de la BD) con un
+#  solo comando:  docker compose up -d
+#  Las migraciones de database/migrations se ejecutan solas
+#  la primera vez que se crea el volumen.
+# ============================================================
+services:
+  db:
+    image: postgres:16
+    container_name: web360_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-web360}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cambiar_esta_clave}
+      POSTGRES_DB: ${POSTGRES_DB:-web360_calidad}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - web360_pgdata:/var/lib/postgresql/data
+      # Los .sql de migrations y seeds se corren en orden alfabético
+      # SOLO en la primera creación del volumen.
+      - ./database/migrations:/docker-entrypoint-initdb.d/1-migrations:ro
+      - ./database/seeds:/docker-entrypoint-initdb.d/2-seeds:ro
+
+  adminer:
+    image: adminer:4
+    container_name: web360_adminer
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+
+volumes:
+  web360_pgdata:
