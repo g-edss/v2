@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Frontend — WEB 360 de Calidad
 
 Interfaz en **Vue 3 + Vite** (JavaScript). Diseño inspirado en QualityWeb 360
