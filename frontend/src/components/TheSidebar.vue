@@ -1,5 +1,7 @@
 <script setup>
+import { computed } from 'vue';
 import AppIcon from './AppIcon.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const nav = [
   { to: '/',            label: 'Inicio',       icon: 'dashboard' },
@@ -8,7 +10,11 @@ const nav = [
   { to: '/solicitudes', label: 'Solicitudes',  icon: 'request' },
   { to: '/auditorias',  label: 'Auditorías',   icon: 'audit' },
   { to: '/juntas',      label: 'Juntas',       icon: 'meeting' },
+  { to: '/usuarios',    label: 'Usuarios',     icon: 'users', admin: true },
 ];
+
+const auth = useAuthStore();
+const navVisible = computed(() => nav.filter((item) => !item.admin || auth.usuario?.rol_clave === 'admin_general'));
 </script>
 
 <template>
@@ -29,7 +35,7 @@ const nav = [
     </div>
 
     <nav class="nav">
-      <RouterLink v-for="item in nav" :key="item.to" :to="item.to"
+      <RouterLink v-for="item in navVisible" :key="item.to" :to="item.to"
                   class="nav-item" active-class="active"
                   :exact-active-class="item.to === '/' ? 'active' : ''">
         <AppIcon :name="item.icon" :size="18" />

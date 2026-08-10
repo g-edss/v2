@@ -20,8 +20,8 @@ services:
       - web360_pgdata:/var/lib/postgresql/data
       # Los .sql de migrations y seeds se corren en orden alfabético
       # SOLO en la primera creación del volumen.
-      - ./database/migrations:/docker-entrypoint-initdb.d/1-migrations:ro
-      - ./database/seeds:/docker-entrypoint-initdb.d/2-seeds:ro
+      - ./database/migrations/001_esquema_inicial.sql:/docker-entrypoint-initdb.d/001_esquema_inicial.sql:ro
+      - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/002_catalogos.sql:ro
 
   adminer:
     image: adminer:4
