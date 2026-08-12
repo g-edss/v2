@@ -30,6 +30,9 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore();
   if (to.meta.requiereAuth && !auth.autenticado) return { name: 'login' };
+  if (to.meta.requiereAdmin && auth.usuario?.rol_clave !== 'admin_general') {
+    return { name: 'dashboard' };
+  }
   if (to.name === 'login' && auth.autenticado) return { name: 'dashboard' };
 });
 

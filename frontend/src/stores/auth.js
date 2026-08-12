@@ -1,21 +1,35 @@
 import { defineStore } from 'pinia';
+import { api } from '@/api/client';
 
-// Autenticación de ejemplo (mock). Reemplazar por login real contra el API.
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     usuario: JSON.parse(localStorage.getItem('web360_user') || 'null'),
+    token: localStorage.getItem('web360_token'),
   }),
+
   getters: {
-    autenticado: (s) => !!s.usuario,
+    autenticado: (state) => !!state.token,
   },
+
   actions: {
-    login(correo) {
-      // TODO: sustituir por POST /api/auth/login
-      this.usuario = { nombre: 'Administrador', correo, rol: 'Administrador General' };
-      localStorage.setItem('web360_user', JSON.stringify(this.usuario));
+    async login(correo, password) {
+      const { token, usuario } = await api.post('/auth/login', {
+        correo,
+        password,
+      });
+
+      this.token = token;
+      this.usuario = usuario;
+
+      localStorage.setItem('web360_token', token);
+      localStorage.setItem('web360_user', JSON.stringify(usuario));
     },
+
     logout() {
+      this.token = null;
       this.usuario = null;
+
+      localStorage.removeItem('web360_token');
       localStorage.removeItem('web360_user');
     },
   },

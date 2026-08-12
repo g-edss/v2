@@ -3,15 +3,26 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 
-const correo = ref('admin@fime.uanl.mx');
+const correo = ref('');
 const clave = ref('');
+const error = ref('');
+const cargando = ref(false);
+
 const auth = useAuthStore();
 const router = useRouter();
 
-function entrar() {
-  // Login de ejemplo: acepta cualquier credencial. Reemplazar por el API real.
-  auth.login(correo.value);
-  router.push({ name: 'dashboard' });
+async function entrar() {
+  error.value = '';
+  cargando.value = true;
+
+  try {
+    await auth.login(correo.value, clave.value);
+    router.push({ name: 'dashboard' });
+  } catch {
+    error.value = 'Correo o contraseña incorrectos.';
+  } finally {
+    cargando.value = false;
+  }
 }
 </script>
 
@@ -36,9 +47,12 @@ function entrar() {
         </label>
         <label>
           <span>Contraseña</span>
-          <input v-model="clave" type="password" placeholder="••••••••" />
+          <input v-model="clave" type="password" required placeholder="••••••••" />
         </label>
-        <button class="btn btn-primary" type="submit">Iniciar sesión</button>
+        <button class="btn btn-primary" type="submit" :disabled="cargando">
+          {{ cargando ? 'Iniciando sesión...' : 'Iniciar sesión' }}
+        </button>
+        <p v-if="error" class="hint" style="color: #b42318">{{ error }}</p>
         <p class="hint muted">Acceso de demostración — el login real se conecta al API.</p>
       </form>
     </div>
