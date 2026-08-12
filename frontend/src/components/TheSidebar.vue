@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import AppIcon from './AppIcon.vue';
+import { useAuthStore } from '@/stores/auth';
 
 // Submenús desplegables
 const catalogosAbierto = ref(false);

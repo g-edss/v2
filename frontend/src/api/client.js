@@ -3,9 +3,16 @@
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function request(path, options = {}) {
+  const token = localStorage.getItem('web360_token');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options.headers,
+  };
+
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
   if (!res.ok) throw new Error(`Error ${res.status} en ${path}`);
   return res.json();
