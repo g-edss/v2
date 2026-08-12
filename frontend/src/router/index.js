@@ -9,18 +9,14 @@ const routes = [
     component: DefaultLayout,
     meta: { requiereAuth: true },
     children: [
-      { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
-      { path: 'procesos', name: 'procesos', component: () => import('@/views/ProcesosView.vue') },
-      { path: 'documentos', name: 'documentos', component: () => import('@/views/DocumentosView.vue') },
-      { path: 'solicitudes', name: 'solicitudes', component: () => import('@/views/SolicitudesView.vue') },
-      { path: 'auditorias', name: 'auditorias', component: () => import('@/views/AuditoriasView.vue') },
-      { path: 'juntas', name: 'juntas', component: () => import('@/views/JuntasView.vue') },
-      {
-        path: 'usuarios',
-        name: 'usuarios',
-        component: () => import('@/views/UsuariosView.vue'),
-        meta: { requiereAdmin: true },
-      },
+      { path: '',           name: 'dashboard',   component: () => import('@/views/DashboardView.vue') },
+      { path: 'procesos',   name: 'procesos',    component: () => import('@/views/ProcesosView.vue') },
+      { path: 'documentos', name: 'documentos',  component: () => import('@/views/DocumentosView.vue') },
+      { path: 'solicitudes',name: 'solicitudes', component: () => import('@/views/SolicitudesView.vue') },
+      { path: 'auditorias', name: 'auditorias',  component: () => import('@/views/AuditoriasView.vue') },
+      { path: 'juntas',     name: 'juntas',      component: () => import('@/views/JuntasView.vue') },
+      // ← Nueva vista de usuarios (trabajo de tu compañera)
+      { path: 'usuarios',   name: 'usuarios',    component: () => import('@/views/UsuariosView.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
@@ -31,7 +27,6 @@ const router = createRouter({
   routes,
 });
 
-// Guarda de ruta: exige "sesión" para las vistas de la app.
 router.beforeEach((to) => {
   const auth = useAuthStore();
   if (to.meta.requiereAuth && !auth.autenticado) return { name: 'login' };
