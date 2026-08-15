@@ -43,3 +43,50 @@ export async function crear(req, res, next) {
     next(error);
   }
 }
+
+export async function listar(_req, res, next) {
+  try {
+    const usuarios = await usuariosService.listar();
+    res.json(usuarios);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function actualizar(req, res, next) {
+  try {
+    const { nombre, correo, puesto, rol_clave, password, estado } = req.body;
+
+    if (correo !== undefined && (typeof correo !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo))) {
+      return res.status(400).json({ error: 'El correo no tiene un formato válido' });
+    }
+
+    if (password && password.length < 8) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+    }
+
+    const activo = estado === undefined ? undefined : estado === 'Activo';
+
+    const usuario = await usuariosService.actualizar(req.params.id, {
+      nombre,
+      correo,
+      puesto,
+      rol_clave,
+      password: password || undefined,
+      activo,
+    });
+
+    res.json(usuario);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function eliminar(req, res, next) {
+  try {
+    await usuariosService.eliminar(req.params.id);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+}
