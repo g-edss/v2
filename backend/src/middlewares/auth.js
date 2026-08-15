@@ -30,3 +30,14 @@ export function requireAdmin(req, res, next) {
 
   next();
 }
+
+export function requireRole(...rolesPermitidos) {
+  return (req, res, next) => {
+    if (!req.auth || !rolesPermitidos.includes(req.auth.rol)) {
+      return res.status(403).json({
+        error: 'No tienes permiso para acceder a este recurso',
+      });
+    }
+    next();
+  };
+}

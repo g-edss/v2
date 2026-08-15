@@ -13,9 +13,11 @@ const perfilAbierto = ref(false);
 
 const titulos = {
   dashboard: 'Inicio', procesos: 'Procesos', documentos: 'Documentos',
+  almacenRegistros: 'Almacén de Registros',
   solicitudes: 'Solicitudes', auditorias: 'Auditorías', juntas: 'Juntas',
   usuarios: 'Usuarios',
 };
+
 const titulo = computed(() => titulos[route.name] || 'WEB 360 de Calidad');
 
 const iniciales = computed(() => {
