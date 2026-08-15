@@ -1,5 +1,3 @@
-// Cliente HTTP mínimo sobre fetch (sin dependencias).
-// Si el backend no está arriba, las vistas usan datos de ejemplo (ver ./mock.js).
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function request(path, options = {}) {
@@ -10,11 +8,9 @@ async function request(path, options = {}) {
     ...options.headers,
   };
 
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const res = await fetch(`${BASE}${path}`, { ...options, headers });
   if (!res.ok) throw new Error(`Error ${res.status} en ${path}`);
+  if (res.status === 204) return null;
   return res.json();
 }
 

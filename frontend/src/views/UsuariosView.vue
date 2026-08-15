@@ -1,14 +1,48 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import BaseCard from '@/components/BaseCard.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import { api } from '@/api/client.js';
 
-/* ---------- Datos de ejemplo ---------- */
 const usuarios = ref([
-  { id: 1, nombre: 'Ana Torres', correo: 'ana.torres@fime.uanl.mx', telefono: '81 1234 5678', puesto: 'Administrador General', estado: 'Activo', fotoUrl: '' },
-  { id: 2, nombre: 'Luis Cárdenas', correo: 'luis.cardenas@fime.uanl.mx', telefono: '81 2345 6789', puesto: 'Auditor', estado: 'Activo', fotoUrl: '' },
-  { id: 3, nombre: 'María Delgado', correo: 'maria.delgado@fime.uanl.mx', telefono: '81 3456 7890', puesto: 'Aprobador', estado: 'Inactivo', fotoUrl: '' },
+  { id: 1, nombre: 'Ana Torres', correo: 'ana.torres@fime.uanl.mx', telefono: '81 1234 5678', puesto: 'Coordinadora de Calidad', rol_clave: 'admin_general', rol: 'Administrador General', estado: 'Activo', fotoUrl: '' },
+  { id: 2, nombre: 'Luis Cárdenas', correo: 'luis.cardenas@fime.uanl.mx', telefono: '81 2345 6789', puesto: 'Auditor interno', rol_clave: 'auditor', rol: 'Auditor', estado: 'Activo', fotoUrl: '' },
+  { id: 3, nombre: 'María Delgado', correo: 'maria.delgado@fime.uanl.mx', telefono: '81 3456 7890', puesto: 'Aprobadora documental', rol_clave: 'aprobador', rol: 'Aprobador', estado: 'Inactivo', fotoUrl: '' },
 ]);
+
+const cargando = ref(false);
+const errorCarga = ref('');
+
+async function cargarUsuarios() {
+  cargando.value = true;
+  errorCarga.value = '';
+  try {
+    const datos = await api.get('/usuarios');
+    usuarios.value = datos.map((u) => ({
+      ...u,
+      estado: u.activo === false ? 'Inactivo' : 'Activo',
+    }));
+  } catch (e) {
+    errorCarga.value = 'No se pudo conectar con el servidor. Mostrando datos de ejemplo.';
+  } finally {
+    cargando.value = false;
+  }
+}
+
+onMounted(cargarUsuarios);
+
+const ROLES = [
+  { clave: 'admin_general', nombre: 'Administrador General' },
+  { clave: 'responsable',   nombre: 'Responsable' },
+  { clave: 'revisor',       nombre: 'Revisor' },
+  { clave: 'aprobador',     nombre: 'Aprobador' },
+  { clave: 'visor',         nombre: 'Visor' },
+  { clave: 'auditor',       nombre: 'Auditor' },
+];
+
+function nombreRol(clave) {
+  return ROLES.find((r) => r.clave === clave)?.nombre || clave;
+}
 
 /* ---------- Búsqueda y paginación ---------- */
 const busqueda = ref('');
@@ -19,7 +53,7 @@ const usuariosFiltrados = computed(() => {
   const t = busqueda.value.trim().toLowerCase();
   if (!t) return usuarios.value;
   return usuarios.value.filter((u) =>
-    [u.nombre, u.correo, u.telefono, u.puesto, u.estado].join(' ').toLowerCase().includes(t)
+    [u.nombre, u.correo, u.telefono, u.puesto, nombreRol(u.rol_clave), u.estado].join(' ').toLowerCase().includes(t)
   );
 });
 
@@ -34,21 +68,22 @@ const usuariosPagina = computed(() =>
 );
 
 /* ---------- Modal ---------- */
-const modalUsuario = ref(null); // null | 'nuevo' | objeto usuario
+const modalUsuario = ref(null); 
 const usuarioABorrar = ref(null);
 const errores = ref({});
-
-const PUESTOS = ['Administrador General', 'Responsable', 'Revisor', 'Aprobador', 'Visor', 'Auditor'];
-const ESTADOS = ['Activo', 'Inactivo'];
+const guardando = ref(false);
 
 const esNuevo = computed(() => modalUsuario.value === 'nuevo');
 
-const form = ref({ id: null, nombre: '', correo: '', telefono: '', puesto: PUESTOS[0], contrasena: '', estado: 'Activo', fotoUrl: '' });
+const form = ref({
+  id: null, nombre: '', correo: '', telefono: '',
+  puesto: '', rol_clave: 'visor', contrasena: '', estado: 'Activo',
+});
 
 watch(modalUsuario, (val) => {
   errores.value = {};
   if (val === 'nuevo') {
-    form.value = { id: null, nombre: '', correo: '', telefono: '', puesto: PUESTOS[0], contrasena: '', estado: 'Activo', fotoUrl: '' };
+    form.value = { id: null, nombre: '', correo: '', telefono: '', puesto: '', rol_clave: 'visor', contrasena: '', estado: 'Activo' };
   } else if (val && typeof val === 'object') {
     form.value = { ...val, contrasena: '' };
   }
@@ -61,34 +96,76 @@ function validar() {
   if (!form.value.nombre.trim()) e.nombre = 'El nombre es obligatorio.';
   if (!form.value.correo.trim()) e.correo = 'El correo es obligatorio.';
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.value.correo)) e.correo = 'Correo inválido.';
-  if (!form.value.puesto) e.puesto = 'Selecciona un puesto.';
+  if (!form.value.rol_clave) e.rol_clave = 'Selecciona un rol.';
   if (esNuevo.value && !form.value.contrasena.trim()) e.contrasena = 'La contraseña es obligatoria.';
+  else if (esNuevo.value && form.value.contrasena.trim().length < 8) e.contrasena = 'Debe tener al menos 8 caracteres.';
   errores.value = e;
   return Object.keys(e).length === 0;
 }
 
-function guardar() {
+async function guardar() {
   if (!validar()) return;
-  const { contrasena, ...datos } = form.value;
-  if (esNuevo.value) {
-    usuarios.value.push({ ...datos, id: Date.now() });
-  } else {
-    usuarios.value = usuarios.value.map((u) => u.id === datos.id ? datos : u);
+  guardando.value = true;
+
+  try {
+    if (esNuevo.value) {
+      const nuevo = await api.post('/usuarios', {
+        nombre: form.value.nombre.trim(),
+        correo: form.value.correo.trim(),
+        puesto: form.value.puesto.trim() || null,
+        rol_clave: form.value.rol_clave,
+        password: form.value.contrasena,
+      });
+      usuarios.value.unshift({ ...nuevo, estado: 'Activo' });
+    } else {
+      const actualizado = await api.put(`/usuarios/${form.value.id}`, {
+        nombre: form.value.nombre.trim(),
+        correo: form.value.correo.trim(),
+        puesto: form.value.puesto.trim() || null,
+        rol_clave: form.value.rol_clave,
+        estado: form.value.estado,
+
+        ...(form.value.contrasena.trim() ? { password: form.value.contrasena.trim() } : {}),
+      });
+      usuarios.value = usuarios.value.map((u) =>
+        u.id === actualizado.id
+          ? { ...actualizado, estado: actualizado.activo === false ? 'Inactivo' : 'Activo' }
+          : u
+      );
+    }
+    cerrarModal();
+  } catch (e) {
+    errores.value = {
+      general: e.message?.includes('409')
+        ? 'Ya existe un usuario con ese correo.'
+        : 'No se pudo guardar. Verifica los datos o que tu sesión siga activa como Administrador General.',
+    };
+  } finally {
+    guardando.value = false;
   }
-  cerrarModal();
 }
 
-function confirmarBorrado() {
+async function confirmarBorrado() {
   if (!usuarioABorrar.value) return;
-  usuarios.value = usuarios.value.filter((u) => u.id !== usuarioABorrar.value.id);
-  usuarioABorrar.value = null;
+
+  try {
+    await api.del(`/usuarios/${usuarioABorrar.value.id}`);
+    
+    usuarios.value = usuarios.value.map((u) =>
+      u.id === usuarioABorrar.value.id ? { ...u, estado: 'Inactivo' } : u
+    );
+  } catch (e) {
+    errorCarga.value = 'No se pudo desactivar el usuario. Intenta de nuevo.';
+  } finally {
+    usuarioABorrar.value = null;
+  }
 }
 
 /* ---------- Exportar CSV ---------- */
 function exportarCSV() {
-  const enc = ['Nombre', 'Correo', 'Teléfono', 'Puesto', 'Estado'];
-  const filas = usuariosFiltrados.value.map((u) => [u.nombre, u.correo, u.telefono, u.puesto, u.estado]);
-  const txt = [enc, ...filas].map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const enc = ['Nombre', 'Correo', 'Teléfono', 'Puesto', 'Rol', 'Estado'];
+  const filas = usuariosFiltrados.value.map((u) => [u.nombre, u.correo, u.telefono, u.puesto, nombreRol(u.rol_clave), u.estado]);
+  const txt = [enc, ...filas].map((f) => f.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\uFEFF' + txt], { type: 'text/csv;charset=utf-8;' }));
   a.download = 'usuarios.csv';
@@ -97,7 +174,7 @@ function exportarCSV() {
 }
 
 function iniciales(nombre) {
-  return nombre.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+  return (nombre || '').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 </script>
 
@@ -112,6 +189,8 @@ function iniciales(nombre) {
         <AppIcon name="plus" :size="16" /> Nuevo usuario
       </button>
     </div>
+
+    <div v-if="errorCarga" class="error-banner">{{ errorCarga }}</div>
 
     <BaseCard>
       <!-- Toolbar -->
@@ -141,19 +220,24 @@ function iniciales(nombre) {
             <th>Correo</th>
             <th>Teléfono</th>
             <th>Puesto</th>
+            <th>Rol</th>
             <th>Estado</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
+          <tr v-if="cargando">
+            <td colspan="8" class="empty-row">Cargando usuarios…</td>
+          </tr>
           <tr v-for="u in usuariosPagina" :key="u.id">
             <td>
               <div class="avatar-circle">{{ iniciales(u.nombre) }}</div>
             </td>
             <td><strong>{{ u.nombre }}</strong></td>
             <td class="muted">{{ u.correo }}</td>
-            <td class="muted">{{ u.telefono }}</td>
-            <td>{{ u.puesto }}</td>
+            <td class="muted">{{ u.telefono || '—' }}</td>
+            <td>{{ u.puesto || '—' }}</td>
+            <td>{{ nombreRol(u.rol_clave) }}</td>
             <td>
               <span class="badge" :class="u.estado === 'Activo' ? 'badge-ok' : 'badge-muted'">
                 {{ u.estado }}
@@ -164,14 +248,14 @@ function iniciales(nombre) {
                 <button class="action-btn edit" title="Editar" @click="modalUsuario = u">
                   <AppIcon name="check" :size="14" />
                 </button>
-                <button class="action-btn del" title="Eliminar" @click="usuarioABorrar = u">
+                <button class="action-btn del" title="Desactivar" @click="usuarioABorrar = u">
                   <AppIcon name="plus" :size="14" style="transform:rotate(45deg)" />
                 </button>
               </div>
             </td>
           </tr>
-          <tr v-if="usuariosPagina.length === 0">
-            <td colspan="7" class="empty-row">No se encontraron usuarios.</td>
+          <tr v-if="!cargando && usuariosPagina.length === 0">
+            <td colspan="8" class="empty-row">No se encontraron usuarios.</td>
           </tr>
         </tbody>
       </table>
@@ -195,7 +279,8 @@ function iniciales(nombre) {
             <button class="modal-close" @click="cerrarModal">✕</button>
           </div>
           <div class="modal-body">
-            <div v-if="Object.keys(errores).length" class="error-banner">
+            <div v-if="errores.general" class="error-banner">{{ errores.general }}</div>
+            <div v-else-if="Object.keys(errores).length" class="error-banner">
               Revisa los campos marcados.
             </div>
 
@@ -217,11 +302,16 @@ function iniciales(nombre) {
             </label>
 
             <label class="field">
-              <span>Puesto / Rol</span>
-              <select v-model="form.puesto" :class="{ 'input-error': errores.puesto }">
-                <option v-for="p in PUESTOS" :key="p" :value="p">{{ p }}</option>
+              <span>Puesto</span>
+              <input v-model="form.puesto" type="text" placeholder="Ej. Coordinador de Calidad" />
+            </label>
+
+            <label class="field">
+              <span>Rol</span>
+              <select v-model="form.rol_clave" :class="{ 'input-error': errores.rol_clave }">
+                <option v-for="r in ROLES" :key="r.clave" :value="r.clave">{{ r.nombre }}</option>
               </select>
-              <small v-if="errores.puesto" class="err">{{ errores.puesto }}</small>
+              <small v-if="errores.rol_clave" class="err">{{ errores.rol_clave }}</small>
             </label>
 
             <label class="field">
@@ -235,13 +325,16 @@ function iniciales(nombre) {
             <label v-if="!esNuevo" class="field">
               <span>Estado</span>
               <select v-model="form.estado">
-                <option v-for="e in ESTADOS" :key="e" :value="e">{{ e }}</option>
+                <option value="Activo">Activo</option>
+                <option value="Inactivo">Inactivo</option>
               </select>
             </label>
 
             <div class="modal-actions">
-              <button class="btn btn-ghost" @click="cerrarModal">Cancelar</button>
-              <button class="btn btn-primary" @click="guardar">Guardar</button>
+              <button class="btn btn-ghost" @click="cerrarModal" :disabled="guardando">Cancelar</button>
+              <button class="btn btn-primary" @click="guardar" :disabled="guardando">
+                {{ guardando ? 'Guardando…' : 'Guardar' }}
+              </button>
             </div>
           </div>
         </div>
@@ -250,21 +343,21 @@ function iniciales(nombre) {
 
     <!-- ===== MODAL ELIMINAR ===== -->
     <Teleport to="body">
-      <div v-if="usuarioABorrar" class="overlay" @click="usuarioABorrar = null">
-        <div class="modal modal-sm" @click.stop>
-          <div class="modal-head">
-            <h2>Eliminar usuario</h2>
-            <button class="modal-close" @click="usuarioABorrar = null">✕</button>
-          </div>
-          <div class="modal-body">
-            <p>¿Seguro que quieres eliminar a <strong>{{ usuarioABorrar.nombre }}</strong>? Esta acción no se puede deshacer.</p>
-            <div class="modal-actions">
-              <button class="btn btn-ghost" @click="usuarioABorrar = null">Cancelar</button>
-              <button class="btn" style="background:var(--danger);color:#fff" @click="confirmarBorrado">Eliminar</button>
-            </div>
+    <div v-if="usuarioABorrar" class="overlay" @click="usuarioABorrar = null">
+      <div class="modal modal-sm" @click.stop>
+        <div class="modal-head">
+          <h2>Desactivar usuario</h2>
+          <button class="modal-close" @click="usuarioABorrar = null">✕</button>
+        </div>
+        <div class="modal-body">
+          <p>¿Seguro que quieres desactivar a <strong>{{ usuarioABorrar.nombre }}</strong>? No podrá iniciar sesión. Un administrador puede reactivarlo editando su estado.</p>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" @click="usuarioABorrar = null">Cancelar</button>
+            <button class="btn" style="background:var(--danger);color:#fff" @click="confirmarBorrado">Desactivar</button>
           </div>
         </div>
       </div>
+    </div>
     </Teleport>
   </div>
 </template>
