@@ -1,50 +1,103 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { ref, computed, watch } from 'vue';
 import BaseCard from '@/components/BaseCard.vue';
 import AppIcon from '@/components/AppIcon.vue';
-import { api } from '@/api/client';
 
-const roles = [
-  { clave: 'admin_general', nombre: 'Administrador General' },
-  { clave: 'responsable', nombre: 'Responsable' },
-  { clave: 'revisor', nombre: 'Revisor' },
-  { clave: 'aprobador', nombre: 'Aprobador' },
-  { clave: 'visor', nombre: 'Visor' },
-  { clave: 'auditor', nombre: 'Auditor' },
-];
+/* ---------- Datos de ejemplo ---------- */
+const usuarios = ref([
+  { id: 1, nombre: 'Ana Torres', correo: 'ana.torres@fime.uanl.mx', telefono: '81 1234 5678', puesto: 'Administrador General', estado: 'Activo', fotoUrl: '' },
+  { id: 2, nombre: 'Luis Cárdenas', correo: 'luis.cardenas@fime.uanl.mx', telefono: '81 2345 6789', puesto: 'Auditor', estado: 'Activo', fotoUrl: '' },
+  { id: 3, nombre: 'María Delgado', correo: 'maria.delgado@fime.uanl.mx', telefono: '81 3456 7890', puesto: 'Aprobador', estado: 'Inactivo', fotoUrl: '' },
+]);
 
-const formulario = reactive({
-  nombre: '',
-  correo: '',
-  puesto: '',
-  rol_clave: 'responsable',
-  password: '',
+/* ---------- Búsqueda y paginación ---------- */
+const busqueda = ref('');
+const filasPorPagina = ref(10);
+const pagina = ref(1);
+
+const usuariosFiltrados = computed(() => {
+  const t = busqueda.value.trim().toLowerCase();
+  if (!t) return usuarios.value;
+  return usuarios.value.filter((u) =>
+    [u.nombre, u.correo, u.telefono, u.puesto, u.estado].join(' ').toLowerCase().includes(t)
+  );
 });
 
-const cargando = ref(false);
-const error = ref('');
-const exito = ref('');
+const totalPaginas = computed(() =>
+  Math.max(1, Math.ceil(usuariosFiltrados.value.length / filasPorPagina.value))
+);
+const usuariosPagina = computed(() =>
+  usuariosFiltrados.value.slice(
+    (pagina.value - 1) * filasPorPagina.value,
+    pagina.value * filasPorPagina.value
+  )
+);
 
-async function crearUsuario() {
-  error.value = '';
-  exito.value = '';
-  cargando.value = true;
+/* ---------- Modal ---------- */
+const modalUsuario = ref(null); // null | 'nuevo' | objeto usuario
+const usuarioABorrar = ref(null);
+const errores = ref({});
 
-  try {
-    const usuario = await api.post('/usuarios', formulario);
-    exito.value = `Usuario creado: ${usuario.nombre} (${usuario.correo}).`;
-    formulario.nombre = '';
-    formulario.correo = '';
-    formulario.puesto = '';
-    formulario.rol_clave = 'responsable';
-    formulario.password = '';
-  } catch (err) {
-    error.value = err.message.includes('401') || err.message.includes('403')
-      ? 'Tu sesión no tiene permisos para crear usuarios. Vuelve a iniciar sesión como administrador.'
-      : 'No se pudo crear el usuario. Revisa los datos e intenta de nuevo.';
-  } finally {
-    cargando.value = false;
+const PUESTOS = ['Administrador General', 'Responsable', 'Revisor', 'Aprobador', 'Visor', 'Auditor'];
+const ESTADOS = ['Activo', 'Inactivo'];
+
+const esNuevo = computed(() => modalUsuario.value === 'nuevo');
+
+const form = ref({ id: null, nombre: '', correo: '', telefono: '', puesto: PUESTOS[0], contrasena: '', estado: 'Activo', fotoUrl: '' });
+
+watch(modalUsuario, (val) => {
+  errores.value = {};
+  if (val === 'nuevo') {
+    form.value = { id: null, nombre: '', correo: '', telefono: '', puesto: PUESTOS[0], contrasena: '', estado: 'Activo', fotoUrl: '' };
+  } else if (val && typeof val === 'object') {
+    form.value = { ...val, contrasena: '' };
   }
+});
+
+function cerrarModal() { modalUsuario.value = null; errores.value = {}; }
+
+function validar() {
+  const e = {};
+  if (!form.value.nombre.trim()) e.nombre = 'El nombre es obligatorio.';
+  if (!form.value.correo.trim()) e.correo = 'El correo es obligatorio.';
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.value.correo)) e.correo = 'Correo inválido.';
+  if (!form.value.puesto) e.puesto = 'Selecciona un puesto.';
+  if (esNuevo.value && !form.value.contrasena.trim()) e.contrasena = 'La contraseña es obligatoria.';
+  errores.value = e;
+  return Object.keys(e).length === 0;
+}
+
+function guardar() {
+  if (!validar()) return;
+  const { contrasena, ...datos } = form.value;
+  if (esNuevo.value) {
+    usuarios.value.push({ ...datos, id: Date.now() });
+  } else {
+    usuarios.value = usuarios.value.map((u) => u.id === datos.id ? datos : u);
+  }
+  cerrarModal();
+}
+
+function confirmarBorrado() {
+  if (!usuarioABorrar.value) return;
+  usuarios.value = usuarios.value.filter((u) => u.id !== usuarioABorrar.value.id);
+  usuarioABorrar.value = null;
+}
+
+/* ---------- Exportar CSV ---------- */
+function exportarCSV() {
+  const enc = ['Nombre', 'Correo', 'Teléfono', 'Puesto', 'Estado'];
+  const filas = usuariosFiltrados.value.map((u) => [u.nombre, u.correo, u.telefono, u.puesto, u.estado]);
+  const txt = [enc, ...filas].map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + txt], { type: 'text/csv;charset=utf-8;' }));
+  a.download = 'usuarios.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function iniciales(nombre) {
+  return nombre.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 </script>
 
@@ -53,66 +106,257 @@ async function crearUsuario() {
     <div class="page-head">
       <div>
         <h1>Usuarios</h1>
-        <p>Registra cuentas y asigna los roles del sistema.</p>
+        <p>Catálogo de usuarios del sistema y sus permisos.</p>
       </div>
+      <button class="btn btn-primary" @click="modalUsuario = 'nuevo'">
+        <AppIcon name="plus" :size="16" /> Nuevo usuario
+      </button>
     </div>
 
-    <BaseCard title="Nuevo usuario" subtitle="Las contraseñas se guardan cifradas y no se muestran después de crear la cuenta.">
-      <form class="form" @submit.prevent="crearUsuario">
-        <div class="form-grid">
-          <label>
-            <span>Nombre completo</span>
-            <input v-model="formulario.nombre" required autocomplete="name" placeholder="Nombre Apellido" />
-          </label>
-
-          <label>
-            <span>Correo institucional</span>
-            <input v-model="formulario.correo" type="email" required autocomplete="email" placeholder="usuario@fime.uanl.mx" />
-          </label>
-
-          <label>
-            <span>Puesto</span>
-            <input v-model="formulario.puesto" placeholder="Puesto o área" />
-          </label>
-
-          <label>
-            <span>Rol</span>
-            <select v-model="formulario.rol_clave" required>
-              <option v-for="rol in roles" :key="rol.clave" :value="rol.clave">{{ rol.nombre }}</option>
+    <BaseCard>
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <label class="search-wrap">
+          <AppIcon name="search" :size="15" />
+          <input v-model="busqueda" type="text" placeholder="Buscar…" @input="pagina = 1" />
+        </label>
+        <div class="toolbar-right">
+          <label class="rows-select">
+            Mostrar
+            <select v-model.number="filasPorPagina" @change="pagina = 1">
+              <option v-for="n in [5, 10, 25, 50]" :key="n" :value="n">{{ n }}</option>
             </select>
+            filas
           </label>
-
-          <label class="full-width">
-            <span>Contraseña temporal</span>
-            <input v-model="formulario.password" type="password" required minlength="8" autocomplete="new-password" placeholder="Mínimo 8 caracteres" />
-          </label>
+          <button class="btn btn-ghost btn-sm" @click="exportarCSV">Exportar CSV</button>
         </div>
+      </div>
 
-        <p v-if="error" class="message error">{{ error }}</p>
-        <p v-if="exito" class="message success"><AppIcon name="check" :size="16" /> {{ exito }}</p>
+      <!-- Tabla -->
+      <table class="table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Nombre</th>
+            <th>Correo</th>
+            <th>Teléfono</th>
+            <th>Puesto</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="u in usuariosPagina" :key="u.id">
+            <td>
+              <div class="avatar-circle">{{ iniciales(u.nombre) }}</div>
+            </td>
+            <td><strong>{{ u.nombre }}</strong></td>
+            <td class="muted">{{ u.correo }}</td>
+            <td class="muted">{{ u.telefono }}</td>
+            <td>{{ u.puesto }}</td>
+            <td>
+              <span class="badge" :class="u.estado === 'Activo' ? 'badge-ok' : 'badge-muted'">
+                {{ u.estado }}
+              </span>
+            </td>
+            <td>
+              <div class="row-actions">
+                <button class="action-btn edit" title="Editar" @click="modalUsuario = u">
+                  <AppIcon name="check" :size="14" />
+                </button>
+                <button class="action-btn del" title="Eliminar" @click="usuarioABorrar = u">
+                  <AppIcon name="plus" :size="14" style="transform:rotate(45deg)" />
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr v-if="usuariosPagina.length === 0">
+            <td colspan="7" class="empty-row">No se encontraron usuarios.</td>
+          </tr>
+        </tbody>
+      </table>
 
-        <div class="actions">
-          <button class="btn btn-primary" type="submit" :disabled="cargando">
-            <AppIcon name="plus" :size="16" />
-            {{ cargando ? 'Creando usuario...' : 'Crear usuario' }}
-          </button>
+      <!-- Paginación -->
+      <div class="pagination">
+        <span class="muted">Página {{ pagina }} de {{ totalPaginas }}</span>
+        <div class="row" style="gap:8px">
+          <button class="btn btn-ghost btn-sm" :disabled="pagina <= 1" @click="pagina--">Anterior</button>
+          <button class="btn btn-ghost btn-sm" :disabled="pagina >= totalPaginas" @click="pagina++">Siguiente</button>
         </div>
-      </form>
+      </div>
     </BaseCard>
+
+    <!-- ===== MODAL USUARIO ===== -->
+    <Teleport to="body">
+      <div v-if="modalUsuario" class="overlay" @click="cerrarModal">
+        <div class="modal" @click.stop>
+          <div class="modal-head">
+            <h2>{{ esNuevo ? 'Nuevo usuario' : 'Editar usuario' }}</h2>
+            <button class="modal-close" @click="cerrarModal">✕</button>
+          </div>
+          <div class="modal-body">
+            <div v-if="Object.keys(errores).length" class="error-banner">
+              Revisa los campos marcados.
+            </div>
+
+            <label class="field">
+              <span>Nombre</span>
+              <input v-model="form.nombre" type="text" :class="{ 'input-error': errores.nombre }" />
+              <small v-if="errores.nombre" class="err">{{ errores.nombre }}</small>
+            </label>
+
+            <label class="field">
+              <span>Correo electrónico</span>
+              <input v-model="form.correo" type="email" :class="{ 'input-error': errores.correo }" />
+              <small v-if="errores.correo" class="err">{{ errores.correo }}</small>
+            </label>
+
+            <label class="field">
+              <span>Teléfono</span>
+              <input v-model="form.telefono" type="tel" />
+            </label>
+
+            <label class="field">
+              <span>Puesto / Rol</span>
+              <select v-model="form.puesto" :class="{ 'input-error': errores.puesto }">
+                <option v-for="p in PUESTOS" :key="p" :value="p">{{ p }}</option>
+              </select>
+              <small v-if="errores.puesto" class="err">{{ errores.puesto }}</small>
+            </label>
+
+            <label class="field">
+              <span>{{ esNuevo ? 'Contraseña' : 'Nueva contraseña (opcional)' }}</span>
+              <input v-model="form.contrasena" type="password"
+                     :placeholder="esNuevo ? '' : 'Dejar en blanco para no cambiarla'"
+                     :class="{ 'input-error': errores.contrasena }" />
+              <small v-if="errores.contrasena" class="err">{{ errores.contrasena }}</small>
+            </label>
+
+            <label v-if="!esNuevo" class="field">
+              <span>Estado</span>
+              <select v-model="form.estado">
+                <option v-for="e in ESTADOS" :key="e" :value="e">{{ e }}</option>
+              </select>
+            </label>
+
+            <div class="modal-actions">
+              <button class="btn btn-ghost" @click="cerrarModal">Cancelar</button>
+              <button class="btn btn-primary" @click="guardar">Guardar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ===== MODAL ELIMINAR ===== -->
+    <Teleport to="body">
+      <div v-if="usuarioABorrar" class="overlay" @click="usuarioABorrar = null">
+        <div class="modal modal-sm" @click.stop>
+          <div class="modal-head">
+            <h2>Eliminar usuario</h2>
+            <button class="modal-close" @click="usuarioABorrar = null">✕</button>
+          </div>
+          <div class="modal-body">
+            <p>¿Seguro que quieres eliminar a <strong>{{ usuarioABorrar.nombre }}</strong>? Esta acción no se puede deshacer.</p>
+            <div class="modal-actions">
+              <button class="btn btn-ghost" @click="usuarioABorrar = null">Cancelar</button>
+              <button class="btn" style="background:var(--danger);color:#fff" @click="confirmarBorrado">Eliminar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.form { padding: 14px; }
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--gray-700); }
-input, select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--gray-900); font: inherit; font-size: 14px; outline: none; }
-input:focus, select:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-100); }
-.full-width { grid-column: 1 / -1; }
-.actions { display: flex; justify-content: flex-end; margin-top: 20px; }
-.message { display: flex; align-items: center; gap: 6px; margin-top: 16px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
-.error { color: #b42318; background: #fef3f2; }
-.success { color: #027a48; background: #ecfdf3; }
-button:disabled { cursor: wait; opacity: .7; }
-@media (max-width: 720px) { .form-grid { grid-template-columns: 1fr; } }
+/* Toolbar */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 14px 16px; flex-wrap: wrap;
+}
+.toolbar-right { display: flex; align-items: center; gap: 12px; }
+.search-wrap {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--gray-100); border: 1px solid transparent;
+  border-radius: 8px; padding: 7px 12px; color: var(--gray-500);
+}
+.search-wrap:focus-within { border-color: var(--brand-200); background: #fff; }
+.search-wrap input { border: none; background: transparent; outline: none; font: inherit; font-size: 13px; }
+.rows-select {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--gray-500);
+}
+.rows-select select {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  font: inherit; font-size: 13px; background: #fff;
+}
+
+/* Avatar */
+.avatar-circle {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--brand-200); color: var(--brand-800);
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 700;
+}
+
+/* Row actions */
+.row-actions { display: flex; gap: 6px; }
+.action-btn {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: none; cursor: pointer; display: grid; place-items: center;
+  transition: background .12s;
+}
+.action-btn.edit { background: var(--brand-100); color: var(--brand-700); }
+.action-btn.edit:hover { background: var(--brand-200); }
+.action-btn.del { background: var(--danger-bg); color: var(--danger); }
+.action-btn.del:hover { background: #f5c6c5; }
+
+/* Empty */
+.empty-row { text-align: center; color: var(--gray-500); padding: 28px !important; }
+
+/* Paginación */
+.pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-top: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+
+/* Modal */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 48px 16px; z-index: 100; overflow-y: auto;
+}
+.modal {
+  background: #fff; border-radius: 12px; width: 100%; max-width: 420px;
+  box-shadow: var(--shadow-md); overflow: hidden;
+}
+.modal-sm { max-width: 360px; }
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; background: var(--brand-800); color: #fff;
+}
+.modal-head h2 { font-size: 15px; color: #fff; }
+.modal-close {
+  background: transparent; border: none; color: #fff;
+  font-size: 16px; cursor: pointer; line-height: 1;
+}
+.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+/* Campos */
+.field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: var(--gray-700); }
+.field input, .field select {
+  padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px;
+  font: inherit; font-size: 14px; font-weight: 400; outline: none;
+}
+.field input:focus, .field select:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-100); }
+.input-error { border-color: var(--danger) !important; }
+.err { color: var(--danger); font-weight: 400; font-size: 12px; }
+.error-banner {
+  background: var(--danger-bg); border: 1px solid var(--danger);
+  color: var(--danger); border-radius: 6px; padding: 9px 12px; font-size: 13px;
+}
 </style>

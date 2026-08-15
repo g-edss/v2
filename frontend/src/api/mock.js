@@ -20,7 +20,7 @@ export const procesos = [
   { id: 1, nombre: 'Gestión documental', responsable: 'Ana Torres', correo: 'ana.torres@fime.uanl.mx', estatus: 'activo', creado_en: '2026-06-02' },
   { id: 2, nombre: 'Control de auditorías internas', responsable: 'Luis Cárdenas', correo: 'luis.cardenas@fime.uanl.mx', estatus: 'activo', creado_en: '2026-06-10' },
   { id: 3, nombre: 'Seguimiento de juntas', responsable: 'María Delgado', correo: 'maria.delgado@fime.uanl.mx', estatus: 'activo', creado_en: '2026-06-18' },
-  { id: 4, nombre: 'Gestión de becas', responsable: 'Jorge Ramos', correo: 'jorge.ramos@fime.uanl.mx', estatus: 'inactivo', creado_en: '2026-07-01' },
+  { id: 4, nombre: 'Revisión de documentos', responsable: 'Jorge Ramos', correo: 'jorge.ramos@fime.uanl.mx', estatus: 'inactivo', creado_en: '2026-07-01' },
 ];
 
 export const documentos = [

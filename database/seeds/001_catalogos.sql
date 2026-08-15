@@ -32,7 +32,7 @@ INSERT INTO tipos_solicitud (clave, nombre) VALUES
 ON CONFLICT (clave) DO NOTHING;
 
 -- Usuario administrador inicial (ajustar correo real)
-INSERT INTO usuarios (nombre, correo, puesto, rol_id)
-SELECT 'Administrador', 'admin@fime.uanl.mx', 'Administrador General', r.id
+INSERT INTO usuarios (nombre, correo, puesto, rol_id, password_hash)
+SELECT 'Administrador', 'admin@fime.uanl.mx', 'Administrador General', r.id, '$2a$10$SPTg9DEylMldW/iNdtYu3ehqgHSnPV70aQOgCfi3/t8bZDvamdQ1u'
 FROM roles r WHERE r.clave = 'admin_general'
 ON CONFLICT (correo) DO NOTHING;
