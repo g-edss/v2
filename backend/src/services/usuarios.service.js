@@ -1,5 +1,21 @@
 import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
+const ROLES_DE_USUARIO = new Set([
+  'admin_general',
+  'responsable',
+  'revisor',
+  'aprobador',
+  'visor',
+]);
+
+function validarRolDeUsuario(rol_clave) {
+  if (!ROLES_DE_USUARIO.has(rol_clave)) {
+    const error = new Error('Rol no permitido');
+    error.status = 400;
+    error.publico = 'El rol indicado no está disponible para usuarios.';
+    throw error;
+  }
+}
 
 export async function crear({
   nombre,
@@ -9,6 +25,8 @@ export async function crear({
   password,
 }) {
   const correoNormalizado = correo.trim().toLowerCase();
+
+  validarRolDeUsuario(rol_clave);
 
   const { rows: roles } = await query(
     'SELECT id, nombre FROM roles WHERE clave = $1',
@@ -77,6 +95,8 @@ export async function actualizar(id, { nombre, correo, puesto, rol_clave, passwo
   if (activo !== undefined)  { campos.push(`activo = $${i++}`);  valores.push(activo); }
 
   if (rol_clave !== undefined) {
+    validarRolDeUsuario(rol_clave);
+    
     const { rows: roles } = await query('SELECT id FROM roles WHERE clave = $1', [rol_clave]);
     const rol = roles[0];
 

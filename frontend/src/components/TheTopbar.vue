@@ -16,6 +16,7 @@ const titulos = {
   almacenRegistros: 'Almacén de Registros',
   solicitudes: 'Solicitudes', auditorias: 'Auditorías', juntas: 'Juntas',
   usuarios: 'Usuarios',
+  auditores: 'Auditores',
 };
 
 const titulo = computed(() => titulos[route.name] || 'WEB 360 de Calidad');

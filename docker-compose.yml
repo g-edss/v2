@@ -20,6 +20,7 @@ services:
       - web360_pgdata:/var/lib/postgresql/data
       - ./database/migrations/001_esquema_inicial.sql:/docker-entrypoint-initdb.d/001_esquema_inicial.sql:ro
       - ./database/migrations/002_agregar-autenticacion.sql:/docker-entrypoint-initdb.d/002_agregar-autenticacion.sql:ro
+      - ./database/migrations/003_catalogo_auditores.sql:/docker-entrypoint-initdb.d/003_catalogo_auditores.sql:ro
       - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/010_catalogos.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]

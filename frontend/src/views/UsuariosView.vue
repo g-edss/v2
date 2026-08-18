@@ -6,7 +6,7 @@ import { api } from '@/api/client.js';
 
 const usuarios = ref([
   { id: 1, nombre: 'Ana Torres', correo: 'ana.torres@fime.uanl.mx', telefono: '81 1234 5678', puesto: 'Coordinadora de Calidad', rol_clave: 'admin_general', rol: 'Administrador General', estado: 'Activo', fotoUrl: '' },
-  { id: 2, nombre: 'Luis Cárdenas', correo: 'luis.cardenas@fime.uanl.mx', telefono: '81 2345 6789', puesto: 'Auditor interno', rol_clave: 'auditor', rol: 'Auditor', estado: 'Activo', fotoUrl: '' },
+  { id: 2, nombre: 'Luis Cárdenas', correo: 'luis.cardenas@fime.uanl.mx', telefono: '81 2345 6789', puesto: 'Auditor interno', rol_clave: 'responsable', rol: 'Responsable', estado: 'Activo', fotoUrl: '' },
   { id: 3, nombre: 'María Delgado', correo: 'maria.delgado@fime.uanl.mx', telefono: '81 3456 7890', puesto: 'Aprobadora documental', rol_clave: 'aprobador', rol: 'Aprobador', estado: 'Inactivo', fotoUrl: '' },
 ]);
 
@@ -37,7 +37,6 @@ const ROLES = [
   { clave: 'revisor',       nombre: 'Revisor' },
   { clave: 'aprobador',     nombre: 'Aprobador' },
   { clave: 'visor',         nombre: 'Visor' },
-  { clave: 'auditor',       nombre: 'Auditor' },
 ];
 
 function nombreRol(clave) {
