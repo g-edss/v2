@@ -9,8 +9,7 @@ INSERT INTO roles (clave, nombre) VALUES
     ('responsable',   'Responsable'),
     ('revisor',       'Revisor'),
     ('aprobador',     'Aprobador'),
-    ('visor',         'Visor'),
-    ('auditor',       'Auditor')
+    ('visor',         'Visor')
 ON CONFLICT (clave) DO NOTHING;
 
 -- Tipos de documento (catálogo editable desde la aplicación)

@@ -6,6 +6,7 @@ import healthRoutes from './routes/health.routes.js';
 import procesosRoutes from './routes/procesos.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import usuariosRoutes from './routes/usuarios.routes.js';
+import auditoresRoutes from './routes/auditores.routes.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
 export const app = express();
@@ -18,6 +19,7 @@ app.use('/api', healthRoutes);
 app.use('/api/procesos', procesosRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/auditores', auditoresRoutes);
 
 // Ruta raíz informativa
 app.get('/', (_req, res) => {
