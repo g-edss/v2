@@ -1,7 +1,22 @@
 export const ADMIN_ROLE = 'admin_general';
 
+const ROLE_MODULES = [
+  'dashboard',
+  'procesos',
+  'documentos',
+  'almacenRegistros',
+  'solicitudes',
+  'auditorias',
+  'juntas',
+  'auditores',
+  'indicadores',
+]
+
 export const RUTAS_POR_ROL = {
   visor: ['dashboard', 'documentos', 'almacenRegistros'],
+  responsable: ROLE_MODULES,
+  aprobador: ROLE_MODULES,
+  revisor: ROLE_MODULES,
 };
 
 export function puedeAcceder(rolClave, nombreRuta) {

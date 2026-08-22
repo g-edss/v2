@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { Pencil, Trash2 } from 'lucide-vue-next';
+//import { Pencil, Trash2 } from 'lucide-vue-next';
 import BaseCard from '@/components/BaseCard.vue';
 import AppIcon from '@/components/AppIcon.vue';
 
