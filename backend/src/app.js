@@ -7,7 +7,10 @@ import procesosRoutes from './routes/procesos.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import usuariosRoutes from './routes/usuarios.routes.js';
 import auditoresRoutes from './routes/auditores.routes.js';
+import indicadoresRoutes from './routes/indicadores.routes.js';
+import unidadesmedidaRoutes from './routes/unidadesmedida.routes.js';
 import { errorHandler } from './middlewares/errorHandler.js';
+
 
 export const app = express();
 
@@ -20,6 +23,8 @@ app.use('/api/procesos', procesosRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/auditores', auditoresRoutes);
+app.use('/api/indicadores', indicadoresRoutes);
+app.use('/api/unidades-medida', unidadesmedidaRoutes);
 
 // Ruta raíz informativa
 app.get('/', (_req, res) => {
