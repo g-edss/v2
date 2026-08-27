@@ -4,7 +4,17 @@ import * as controller from '../controllers/indicadores.controller.js';
 
 const router = Router();
 
-router.get('/', requireAuth, controller.listar);
+router.get(
+  '/',
+  requireAuth,
+  requireRole(
+    'admin_general',
+    'responsable',
+    'revisor',
+    'aprobador'
+  ),
+  controller.listar
+);
 
 router.post(
   '/',

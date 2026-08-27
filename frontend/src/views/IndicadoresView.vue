@@ -1,19 +1,27 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { api } from '@/api/client.js';
+import { useAuthStore } from '@/stores/auth';
 //import { Pencil, Trash2 } from 'lucide-vue-next';
 import BaseCard from '@/components/BaseCard.vue';
 import AppIcon from '@/components/AppIcon.vue';
 
+const auth = useAuthStore();
+
+const esAdmin = computed(
+  () => auth.usuario?.rol_clave === 'admin_general'
+);
+
 /* ---------- Datos ---------- */
-const indicadores   = ref([]);
+const indicadores = ref([]);
 const procesos = ref([]);
 const unidadesMedida = ref([]);
+const usuarios = ref([]);
 const cargando = ref(false);
 const error = ref('');
-const busqueda      = ref('');
+const busqueda = ref('');
 const filasPorPagina = ref(10);
-const pagina        = ref(1);
+const pagina = ref(1);
 
 const FRECUENCIAS = [
   { valor: 'mensual', etiqueta: 'Mensual' },
@@ -37,15 +45,22 @@ async function cargarDatos() {
       indicadoresRespuesta,
       procesosRespuesta,
       unidadesRespuesta,
+      usuariosRespuesta,
     ] = await Promise.all([
       api.get('/indicadores'),
       api.get('/procesos'),
       api.get('/unidades-medida'),
+      api.get('/usuarios'),
     ]);
 
     indicadores.value = indicadoresRespuesta;
     procesos.value = procesosRespuesta;
     unidadesMedida.value = unidadesRespuesta;
+    usuarios.value = usuariosRespuesta.filter(
+      (usuario) =>
+        usuario.activo &&
+        usuario.rol_clave !== 'visor'
+    );
   } catch {
     error.value = 'No se pudo cargar el catálogo de indicadores.';
   } finally {
@@ -93,9 +108,49 @@ const formularioVacio = () => ({
   meta_maxima: '',
   sentido: 'rango',
   activo: true,
+  usuarios: [],
 });
 
 const form = ref(formularioVacio());
+
+function usuarioSeleccionado(usuarioId) {
+  return form.value.usuarios.some(
+    (asignacion) => asignacion.usuario_id === usuarioId
+  );
+}
+
+function usuarioPuedeCapturar(usuarioId) {
+  const asignacion = form.value.usuarios.find(
+    (item) => item.usuario_id === usuarioId
+  );
+
+  return asignacion?.puede_capturar || false;
+}
+
+function alternarUsuario(usuarioId, seleccionado) {
+  if (seleccionado) {
+    form.value.usuarios.push({
+      usuario_id: usuarioId,
+      puede_capturar: false,
+    });
+
+    return;
+  }
+
+  form.value.usuarios = form.value.usuarios.filter(
+    (asignacion) => asignacion.usuario_id !== usuarioId
+  );
+}
+
+function alternarCaptura(usuarioId, puedeCapturar) {
+  const asignacion = form.value.usuarios.find(
+    (item) => item.usuario_id === usuarioId
+  );
+
+  if (asignacion) {
+    asignacion.puede_capturar = puedeCapturar;
+  }
+}
 
 function abrirNuevo() {
   esNuevo.value = true;
@@ -118,6 +173,13 @@ function editar(indicador) {
     meta_maxima: indicador.meta_maxima,
     sentido: indicador.sentido,
     activo: indicador.activo,
+    usuarios: (indicador.usuarios || []).filter(
+      (asignacion) =>
+        usuarios.value.some(
+          (usuarioPermitido) =>
+            usuarioPermitido.id === asignacion.usuario_id
+        )
+    ),
   };
   errorFormulario.value = '';
   modalAbierto.value = true;
@@ -149,33 +211,37 @@ async function guardar() {
   errorFormulario.value = '';
 
   try {
-  const datos = {
-    codigo: form.value.codigo.trim(),
-    nombre: form.value.nombre.trim(),
-    descripcion: form.value.descripcion.trim(),
-    proceso_id: Number(form.value.proceso_id),
-    unidad_medida_id: Number(form.value.unidad_medida_id),
-    frecuencia: form.value.frecuencia,
-    meta_minima: Number(form.value.meta_minima),
-    meta_maxima: Number(form.value.meta_maxima),
-    sentido: form.value.sentido,
-    activo: form.value.activo,
-  };
+    const datos = {
+      codigo: form.value.codigo.trim(),
+      nombre: form.value.nombre.trim(),
+      descripcion: form.value.descripcion.trim(),
+      proceso_id: Number(form.value.proceso_id),
+      unidad_medida_id: Number(form.value.unidad_medida_id),
+      frecuencia: form.value.frecuencia,
+      meta_minima: Number(form.value.meta_minima),
+      meta_maxima: Number(form.value.meta_maxima),
+      sentido: form.value.sentido,
+      activo: form.value.activo,
+      usuarios: form.value.usuarios.map((asignacion) => ({
+        usuario_id: asignacion.usuario_id,
+        puede_capturar: asignacion.puede_capturar,
+      })),
+    };
 
-  if (esNuevo.value) {
-    await api.post('/indicadores', datos);
-  } else {
-    await api.put(`/indicadores/${form.value.id}`, datos);
+    if (esNuevo.value) {
+      await api.post('/indicadores', datos);
+    } else {
+      await api.put(`/indicadores/${form.value.id}`, datos);
+    }
+
+    await cargarDatos();
+    cerrarModal();
+  } catch {
+    errorFormulario.value =
+      'No se pudo guardar. Revisa los datos o el código utilizado.';
+  } finally {
+    guardando.value = false;
   }
-
-  await cargarDatos();
-  cerrarModal();
-} catch {
-  errorFormulario.value =
-    'No se pudo guardar. Revisa los datos o el código utilizado.';
-} finally {
-  guardando.value = false;
-}
 }
 
 async function confirmarDesactivacion() {
@@ -224,7 +290,7 @@ function formatearMeta(indicador) {
 
 /* ---------- Exportar CSV ---------- */
 function exportarCSV() {
-  const enc  = ['Código', 'Nombre', 'Proceso', 'Responsable', 'Frecuencia', 'Meta mínima', 'Meta máxima', 'Unidad', 'Estado'];
+  const enc = ['Código', 'Nombre', 'Proceso', 'Responsable', 'Frecuencia', 'Meta mínima', 'Meta máxima', 'Unidad', 'Estado'];
   const filas = indicadoresFiltrados.value.map((indicador) => [
     indicador.codigo,
     indicador.nombre,
@@ -252,7 +318,7 @@ function exportarCSV() {
         <h1>Indicadores</h1>
         <p>Catálogo de indicadores de desempeño por proceso.</p>
       </div>
-      <button class="btn btn-primary" @click="abrirNuevo">
+      <button v-if="esAdmin" class="btn btn-primary" @click="abrirNuevo">
         <AppIcon name="plus" :size="16" /> Nuevo indicador
       </button>
     </div>
@@ -311,19 +377,18 @@ function exportarCSV() {
               </span>
             </td>
             <td>
-              <div class="row-actions">
+              <div v-if="esAdmin" class="row-actions">
                 <button class="action-btn edit" title="Editar" @click="editar(ind)">
                   <span aria-hidden="true">✎</span>
                 </button>
-                <button
-                  class="action-btn del"
-                  :title="ind.activo ? 'Desactivar indicador' : 'Indicador inactivo'"
-                  :disabled="!ind.activo"
-                  @click="indicadorADesactivar = ind"
-                >
+                <button class="action-btn del" :title="ind.activo ? 'Desactivar indicador' : 'Indicador inactivo'"
+                  :disabled="!ind.activo" @click="indicadorADesactivar = ind">
                   <span aria-hidden="true">×</span>
                 </button>
               </div>
+              <span v-else class="muted">
+                Solo consulta
+              </span>
             </td>
           </tr>
           <tr v-if="indicadoresPagina.length === 0">
@@ -353,29 +418,17 @@ function exportarCSV() {
           <div class="modal-body">
             <label class="field">
               <span>Código *</span>
-              <input
-                v-model="form.codigo"
-                type="text"
-                placeholder="Ej. IND-001"
-              />
+              <input v-model="form.codigo" type="text" placeholder="Ej. IND-001" />
             </label>
 
             <label class="field">
               <span>Nombre del indicador *</span>
-              <input
-                v-model="form.nombre"
-                type="text"
-                placeholder="Ej. Cumplimiento de objetivos"
-              />
+              <input v-model="form.nombre" type="text" placeholder="Ej. Cumplimiento de objetivos" />
             </label>
 
             <label class="field">
               <span>Descripción: ¿qué mide el indicador? *</span>
-              <textarea
-                v-model="form.descripcion"
-                rows="3"
-                placeholder="Describe claramente qué se medirá"
-              ></textarea>
+              <textarea v-model="form.descripcion" rows="3" placeholder="Describe claramente qué se medirá"></textarea>
             </label>
 
             <label class="field">
@@ -383,11 +436,7 @@ function exportarCSV() {
               <select v-model="form.proceso_id">
                 <option value="" disabled>Selecciona un proceso</option>
 
-                <option
-                  v-for="proceso in procesos"
-                  :key="proceso.id"
-                  :value="proceso.id"
-                >
+                <option v-for="proceso in procesos" :key="proceso.id" :value="proceso.id">
                   {{ proceso.nombre }}
                 </option>
               </select>
@@ -398,11 +447,7 @@ function exportarCSV() {
               <select v-model="form.unidad_medida_id">
                 <option value="" disabled>Selecciona una unidad</option>
 
-                <option
-                  v-for="unidad in unidadesMedida"
-                  :key="unidad.id"
-                  :value="unidad.id"
-                >
+                <option v-for="unidad in unidadesMedida" :key="unidad.id" :value="unidad.id">
                   {{ unidad.nombre }}
                   {{ unidad.simbolo ? `(${unidad.simbolo})` : '' }}
                 </option>
@@ -414,11 +459,7 @@ function exportarCSV() {
               <select v-model="form.frecuencia">
                 <option value="" disabled>Selecciona una frecuencia</option>
 
-                <option
-                  v-for="frecuencia in FRECUENCIAS"
-                  :key="frecuencia.valor"
-                  :value="frecuencia.valor"
-                >
+                <option v-for="frecuencia in FRECUENCIAS" :key="frecuencia.valor" :value="frecuencia.valor">
                   {{ frecuencia.etiqueta }}
                 </option>
               </select>
@@ -427,33 +468,19 @@ function exportarCSV() {
             <div class="form-grid">
               <label class="field">
                 <span>Meta mínima *</span>
-                <input
-                  v-model="form.meta_minima"
-                  type="number"
-                  step="0.01"
-                  placeholder="Ej. 80"
-                />
+                <input v-model="form.meta_minima" type="number" step="0.01" placeholder="Ej. 80" />
               </label>
 
               <label class="field">
                 <span>Meta máxima *</span>
-                <input
-                  v-model="form.meta_maxima"
-                  type="number"
-                  step="0.01"
-                  placeholder="Ej. 100"
-                />
+                <input v-model="form.meta_maxima" type="number" step="0.01" placeholder="Ej. 100" />
               </label>
             </div>
 
             <label class="field">
               <span>Interpretación del resultado *</span>
               <select v-model="form.sentido">
-                <option
-                  v-for="sentido in SENTIDOS"
-                  :key="sentido.valor"
-                  :value="sentido.valor"
-                >
+                <option v-for="sentido in SENTIDOS" :key="sentido.valor" :value="sentido.valor">
                   {{ sentido.etiqueta }}
                 </option>
               </select>
@@ -468,13 +495,55 @@ function exportarCSV() {
               </select>
             </label>
 
+            <section class="usuarios-section">
+              <div>
+                <h3>Usuarios relacionados</h3>
+                <p>
+                  Selecciona quién puede consultar el indicador y quién puede
+                  capturar sus mediciones.
+                </p>
+              </div>
+
+              <div v-if="usuarios.length === 0" class="usuarios-vacio">
+                No hay usuarios activos disponibles.
+              </div>
+
+              <div v-else class="usuarios-lista">
+                <div v-for="usuario in usuarios" :key="usuario.id" class="usuario-item">
+                  <label class="usuario-info">
+                    <input type="checkbox" :checked="usuarioSeleccionado(usuario.id)" @change="
+                      alternarUsuario(usuario.id, $event.target.checked)
+                      " />
+
+                    <span>
+                      <strong>{{ usuario.nombre }}</strong>
+                      <small>
+                        {{ usuario.puesto || 'Sin puesto' }} ·
+                        {{ usuario.correo }}
+                      </small>
+                    </span>
+                  </label>
+
+                  <label class="permiso-captura">
+                    <input type="checkbox" :disabled="!usuarioSeleccionado(usuario.id)"
+                      :checked="usuarioPuedeCapturar(usuario.id)" @change="
+                        alternarCaptura(usuario.id, $event.target.checked)
+                        " />
+
+                    Puede capturar
+                  </label>
+                </div>
+              </div>
+            </section>
+
             <p v-if="errorFormulario" class="form-error">
               {{ errorFormulario }}
             </p>
 
             <div class="modal-actions">
               <button class="btn btn-ghost" :disabled="guardando" @click="cerrarModal">Cancelar</button>
-              <button class="btn btn-primary" :disabled="guardando" @click="guardar">{{ guardando ? 'Guardando...' : 'Guardar' }}</button>
+              <button class="btn btn-primary" :disabled="guardando" @click="guardar">{{ guardando ? 'Guardando...' :
+                'Guardar' }}</button>
             </div>
           </div>
         </div>
@@ -490,14 +559,15 @@ function exportarCSV() {
             <button class="modal-close" @click="indicadorADesactivar = null">✕</button>
           </div>
           <div class="modal-body">
-              <p>
-                ¿Seguro que quieres desactivar
-                <strong>{{ indicadorADesactivar.nombre }}</strong>?
-                El indicador seguirá guardado y podrás reactivarlo al editarlo.
-              </p>
+            <p>
+              ¿Seguro que quieres desactivar
+              <strong>{{ indicadorADesactivar.nombre }}</strong>?
+              El indicador seguirá guardado y podrás reactivarlo al editarlo.
+            </p>
             <div class="modal-actions">
               <button class="btn btn-ghost" @click="indicadorADesactivar = null">Cancelar</button>
-              <button class="btn" style="background:var(--danger);color:#fff" @click="confirmarDesactivacion">Desactivar</button>
+              <button class="btn" style="background:var(--danger);color:#fff"
+                @click="confirmarDesactivacion">Desactivar</button>
             </div>
           </div>
         </div>
@@ -507,65 +577,205 @@ function exportarCSV() {
 </template>
 
 <style scoped>
-code { background: var(--gray-100); padding: 2px 7px; border-radius: 5px; font-size: 12px; color: var(--brand-800); font-weight: 600; }
+code {
+  background: var(--gray-100);
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--brand-800);
+  font-weight: 600;
+}
 
 .toolbar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; padding: 14px 16px; flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  flex-wrap: wrap;
 }
-.toolbar-right { display: flex; align-items: center; gap: 12px; }
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .search-wrap {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--gray-100); border: 1px solid transparent;
-  border-radius: 8px; padding: 7px 12px; color: var(--gray-500);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gray-100);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 12px;
+  color: var(--gray-500);
 }
-.search-wrap:focus-within { border-color: var(--brand-200); background: #fff; }
-.search-wrap input { border: none; background: transparent; outline: none; font: inherit; font-size: 13px; }
-.rows-select { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--gray-500); }
-.rows-select select { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 13px; background: #fff; }
 
-.row-actions { display: flex; gap: 6px; }
+.search-wrap:focus-within {
+  border-color: var(--brand-200);
+  background: #fff;
+}
+
+.search-wrap input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+}
+
+.rows-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--gray-500);
+}
+
+.rows-select select {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  background: #fff;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .action-btn {
-  width: 28px; height: 28px; border-radius: 6px;
-  border: none; cursor: pointer; display: grid; place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
 }
-.action-btn.edit { background: var(--brand-100); color: var(--brand-700); }
-.action-btn.edit:hover { background: var(--brand-200); }
-.action-btn.del { background: var(--danger-bg); color: var(--danger); }
-.action-btn.del:hover { background: #f5c6c5; }
 
-.empty-row { text-align: center; color: var(--gray-500); padding: 28px !important; }
+.action-btn.edit {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+
+.action-btn.edit:hover {
+  background: var(--brand-200);
+}
+
+.action-btn.del {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.action-btn.del:hover {
+  background: #f5c6c5;
+}
+
+.empty-row {
+  text-align: center;
+  color: var(--gray-500);
+  padding: 28px !important;
+}
 
 .pagination {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px; border-top: 1px solid var(--border-soft); font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 13px;
 }
 
 .overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.45);
-  display: flex; align-items: flex-start; justify-content: center;
-  padding: 48px 16px; z-index: 100; overflow-y: auto;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  z-index: 100;
+  overflow-y: auto;
 }
-.modal {
-  background: #fff; border-radius: 12px; width: 100%; max-width: 420px;
-  box-shadow: var(--shadow-md); overflow: hidden;
-}
-.modal-sm { max-width: 360px; }
-.modal-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 18px; background: var(--brand-800); color: #fff;
-}
-.modal-head h2 { font-size: 15px; color: #fff; }
-.modal-close { background: transparent; border: none; color: #fff; font-size: 16px; cursor: pointer; }
-.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
-.field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: var(--gray-700); }
-.field input, .field select {
-  padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px;
-  font: inherit; font-size: 14px; font-weight: 400; outline: none;
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
-.field input:focus, .field select:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-100); }
+
+.modal-sm {
+  max-width: 360px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--brand-800);
+  color: #fff;
+}
+
+.modal-head h2 {
+  font-size: 15px;
+  color: #fff;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.field input,
+.field select {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  outline: none;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-100);
+}
 
 .estado-mensaje {
   margin: 16px;
@@ -624,5 +834,80 @@ code { background: var(--gray-100); padding: 2px 7px; border-radius: 5px; font-s
 .action-btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.usuarios-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.usuarios-section h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--gray-800);
+}
+
+.usuarios-section p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.usuarios-lista {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.usuario-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.usuario-item:last-child {
+  border-bottom: none;
+}
+
+.usuario-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.usuario-info span {
+  display: flex;
+  flex-direction: column;
+}
+
+.usuario-info strong {
+  font-size: 13px;
+}
+
+.usuario-info small {
+  color: var(--gray-500);
+  font-size: 11px;
+}
+
+.permiso-captura {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.usuarios-vacio {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--gray-100);
+  color: var(--gray-500);
+  font-size: 13px;
 }
 </style>
