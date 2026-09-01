@@ -21,7 +21,9 @@ services:
       - ./database/migrations/001_esquema_inicial.sql:/docker-entrypoint-initdb.d/001_esquema_inicial.sql:ro
       - ./database/migrations/002_agregar-autenticacion.sql:/docker-entrypoint-initdb.d/002_agregar-autenticacion.sql:ro
       - ./database/migrations/003_catalogo_auditores.sql:/docker-entrypoint-initdb.d/003_catalogo_auditores.sql:ro
+      - ./database/migrations/004_catalogo_indicadores.sql:/docker-entrypoint-initdb.d/004_catalogo_indicadores.sql:ro
       - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/010_catalogos.sql:ro
+      - ./database/seeds/002_unidades_medida.sql:/docker-entrypoint-initdb.d/011_unidades_medida.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
