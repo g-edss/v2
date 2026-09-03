@@ -157,31 +157,32 @@ onMounted(async () => {
     <BaseCard>
       <table class="table">
         <thead>
-          <tr><th>Proceso</th><th>Responsable</th><th>Correo</th><th>Estatus</th><th>Registrado</th><th>Acciones</th></tr>
+          <tr>
+            <th>Proceso</th>
+            <th>Responsable</th>
+            <th>Correo</th>
+            <th>Estatus</th>
+            <th>Registrado</th>
+            <th>Acciones</th>
+          </tr>
         </thead>
         <tbody>
           <tr v-for="p in procesos" :key="p.id">
             <td><strong>{{ p.nombre }}</strong></td>
             <td>{{ p.responsable }}</td>
             <td class="muted">{{ p.correo }}</td>
-            <td><StatusBadge :estado="p.estatus" /></td>
+            <td>
+              <StatusBadge :estado="p.estatus" />
+            </td>
             <td class="muted">{{ formatoFecha(p.creado_en) }}</td>
             <td>
               <div v-if="esAdmin" class="row-actions">
-                <button
-                  class="action-btn edit"
-                  title="Editar proceso"
-                  @click="abrirEdicion(p)"
-                >
-                  <AppIcon name="check" :size="14" />
+                <button class="action-btn edit" title="Editar proceso" @click="abrirEdicion(p)">
+                  <span aria-hidden="true">✎</span>
                 </button>
 
-                <button
-                  class="action-btn del"
-                  title="Desactivar proceso"
-                  :disabled="p.estatus === 'inactivo'"
-                  @click="procesoADesactivar = p"
-                >
+                <button class="action-btn del" title="Desactivar proceso" :disabled="p.estatus === 'inactivo'"
+                  @click="procesoADesactivar = p">
                   <AppIcon name="plus" :size="14" style="transform: rotate(45deg)" />
                 </button>
               </div>
@@ -191,117 +192,94 @@ onMounted(async () => {
       </table>
     </BaseCard>
     <Teleport to="body">
-  <div v-if="modalAbierto" class="overlay" @click="cerrarFormulario">
-    <form class="modal" @submit.prevent="guardarProceso" @click.stop>
-      <div class="modal-head">
-        <h2>{{ esEdicion ? 'Editar proceso' : 'Registrar proceso' }}</h2>
-        <button class="modal-close" type="button" @click="cerrarFormulario">×</button>
+      <div v-if="modalAbierto" class="overlay" @click="cerrarFormulario">
+        <form class="modal" @submit.prevent="guardarProceso" @click.stop>
+          <div class="modal-head">
+            <h2>{{ esEdicion ? 'Editar proceso' : 'Registrar proceso' }}</h2>
+            <button class="modal-close" type="button" @click="cerrarFormulario">×</button>
+          </div>
+
+          <div class="modal-body">
+            <p v-if="errorFormulario" class="error-banner">
+              {{ errorFormulario }}
+            </p>
+
+            <label class="field">
+              <span>Nombre del proceso</span>
+              <input v-model="formulario.nombre" required placeholder="Ej. Gestión de documentos" />
+            </label>
+
+            <label class="field">
+              <span>Responsable</span>
+              <select v-model="formulario.responsable_id" required>
+                <option disabled value="">Selecciona un responsable</option>
+                <option v-for="usuario in responsables" :key="usuario.id" :value="usuario.id">
+                  {{ usuario.nombre }} — {{ usuario.correo }}
+                </option>
+              </select>
+            </label>
+
+            <label v-if="esEdicion" class="field">
+              <span>Estado</span>
+              <select v-model="formulario.estatus">
+                <option value="activo">Activo</option>
+                <option value="inactivo">Inactivo</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Descripción general</span>
+              <textarea v-model="formulario.descripcion" rows="4"
+                placeholder="Describe el objetivo o alcance del proceso" />
+            </label>
+
+            <div class="modal-actions">
+              <button class="btn btn-ghost" type="button" @click="cerrarFormulario">
+                Cancelar
+              </button>
+              <button class="btn btn-primary" type="submit" :disabled="guardando">
+                {{
+                  guardando
+                    ? 'Guardando...'
+                    : esEdicion
+                      ? 'Guardar cambios'
+                      : 'Registrar proceso'
+                }}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
+    </Teleport>
+    <Teleport to="body">
+      <div v-if="procesoADesactivar" class="overlay" @click="procesoADesactivar = null">
+        <div class="modal modal-sm" @click.stop>
+          <div class="modal-head">
+            <h2>Desactivar proceso</h2>
+            <button class="modal-close" type="button" @click="procesoADesactivar = null">
+              ×
+            </button>
+          </div>
 
-      <div class="modal-body">
-        <p v-if="errorFormulario" class="error-banner">
-          {{ errorFormulario }}
-        </p>
+          <div class="modal-body">
+            <p>
+              ¿Seguro que deseas desactivar
+              <strong>{{ procesoADesactivar.nombre }}</strong>?
+              El proceso se conservará, pero quedará inactivo.
+            </p>
 
-        <label class="field">
-          <span>Nombre del proceso</span>
-          <input
-            v-model="formulario.nombre"
-            required
-            placeholder="Ej. Gestión de documentos"
-          />
-        </label>
-
-        <label class="field">
-          <span>Responsable</span>
-          <select v-model="formulario.responsable_id" required>
-            <option disabled value="">Selecciona un responsable</option>
-            <option
-              v-for="usuario in responsables"
-              :key="usuario.id"
-              :value="usuario.id"
-            >
-              {{ usuario.nombre }} — {{ usuario.correo }}
-            </option>
-          </select>
-        </label>
-
-        <label v-if="esEdicion" class="field">
-          <span>Estado</span>
-          <select v-model="formulario.estatus">
-            <option value="activo">Activo</option>
-            <option value="inactivo">Inactivo</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Descripción general</span>
-          <textarea
-            v-model="formulario.descripcion"
-            rows="4"
-            placeholder="Describe el objetivo o alcance del proceso"
-          />
-        </label>
-
-        <div class="modal-actions">
-          <button class="btn btn-ghost" type="button" @click="cerrarFormulario">
-            Cancelar
-          </button>
-          <button class="btn btn-primary" type="submit" :disabled="guardando">
-            {{
-              guardando
-                ? 'Guardando...'
-                : esEdicion
-                  ? 'Guardar cambios'
-                  : 'Registrar proceso'
-            }}
-          </button>
+            <div class="modal-actions">
+              <button class="btn btn-ghost" @click="procesoADesactivar = null">
+                Cancelar
+              </button>
+              <button class="btn" style="background: var(--danger); color: #fff" @click="confirmarDesactivacion">
+                Desactivar
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </form>
-  </div>
-</Teleport>
-<Teleport to="body">
-  <div
-    v-if="procesoADesactivar"
-    class="overlay"
-    @click="procesoADesactivar = null"
-  >
-    <div class="modal modal-sm" @click.stop>
-      <div class="modal-head">
-        <h2>Desactivar proceso</h2>
-        <button
-          class="modal-close"
-          type="button"
-          @click="procesoADesactivar = null"
-        >
-          ×
-        </button>
-      </div>
-
-      <div class="modal-body">
-        <p>
-          ¿Seguro que deseas desactivar
-          <strong>{{ procesoADesactivar.nombre }}</strong>?
-          El proceso se conservará, pero quedará inactivo.
-        </p>
-
-        <div class="modal-actions">
-          <button class="btn btn-ghost" @click="procesoADesactivar = null">
-            Cancelar
-          </button>
-          <button
-            class="btn"
-            style="background: var(--danger); color: #fff"
-            @click="confirmarDesactivacion"
-          >
-            Desactivar
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</Teleport>
+    </Teleport>
   </div>
 </template>
 

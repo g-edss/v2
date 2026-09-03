@@ -2,6 +2,7 @@ export const ADMIN_ROLE = 'admin_general';
 
 const ROLE_MODULES = [
   'dashboard',
+  'visorDocumental',
   'procesos',
   'documentos',
   'almacenRegistros',
@@ -13,7 +14,7 @@ const ROLE_MODULES = [
 ]
 
 export const RUTAS_POR_ROL = {
-  visor: ['dashboard', 'documentos', 'almacenRegistros'],
+  visor: ['dashboard', 'visorDocumental', 'almacenRegistros'],
   responsable: ROLE_MODULES,
   aprobador: ROLE_MODULES,
   revisor: ROLE_MODULES,
