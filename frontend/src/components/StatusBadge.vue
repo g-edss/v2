@@ -11,6 +11,7 @@ const mapa = {
   activo: { texto: 'Activo', clase: 'badge-ok' },
   inactivo: { texto: 'Inactivo', clase: 'badge-muted' },
   borrador: { texto: 'Borrador', clase: 'badge-warn' },
+  aprobado: { texto: 'Aprobado', clase: 'badge-ok' },
   en_revision: { texto: 'En revisión', clase: 'badge-warn' },
   correcciones: { texto: 'Requiere correcciones', clase: 'badge-warn' },
   vigente: { texto: 'Vigente', clase: 'badge-ok' },

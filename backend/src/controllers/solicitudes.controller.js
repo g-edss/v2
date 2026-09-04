@@ -63,12 +63,6 @@ export async function aprobar(req, res, next) {
         const codigo =
             String(req.body.codigo || '').trim().toUpperCase();
 
-        if (!codigo) {
-            return res.status(400).json({
-                error: 'Debes asignar el código institucional.',
-            });
-        }
-
         if (codigo.length > 60) {
             return res.status(400).json({
                 error:
@@ -101,7 +95,7 @@ export async function aprobar(req, res, next) {
             });
 
         res.json({
-            mensaje: 'El documento fue aprobado y publicado.',
+            mensaje: 'La solicitud fue aprobada correctamente.',
             solicitud,
         });
     } catch (error) {

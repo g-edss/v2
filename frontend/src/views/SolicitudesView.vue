@@ -37,8 +37,51 @@ function cerrarDecision() {
   error.value = '';
 }
 
+function formatearFecha(valor) {
+  if (!valor) {
+    return '—';
+  }
+
+  const [anio, mes, dia] = valor
+    .slice(0, 10)
+    .split('-');
+
+  return `${dia}/${mes}/${anio}`;
+}
+
 async function verPdf(solicitud) {
   error.value = '';
+
+  if (solicitud.es_registro) {
+    accionArchivo.value = `registro-${solicitud.id}`;
+
+    try {
+      const blob = await api.getBlob(
+        `/registros/${solicitud.registro_id}/archivo`
+      );
+
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+
+      enlace.href = url;
+      enlace.download =
+        solicitud.nombre_archivo || 'registro';
+
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      error.value =
+        err.message ||
+        'No se pudo descargar la evidencia.';
+    } finally {
+      accionArchivo.value = '';
+    }
+
+    return;
+  }
 
   const ventana = window.open('', '_blank');
 
@@ -58,7 +101,7 @@ async function verPdf(solicitud) {
     const blob = await api.getBlob(
       `/documentos/${solicitud.documento_id}` +
       `/versiones/${solicitud.version_documento_id}` +
-      '/pdf',
+      '/pdf'
     );
 
     const url = URL.createObjectURL(blob);
@@ -125,11 +168,14 @@ async function aprobarSeleccionada() {
     return;
   }
 
+  const esRegistro =
+    solicitudSeleccionada.value.es_registro;
+
   const codigo = codigoDecision.value
     .trim()
     .toUpperCase();
 
-  if (!codigo) {
+  if (!esRegistro && !codigo) {
     error.value =
       'Debes asignar el código institucional.';
     return;
@@ -146,7 +192,7 @@ async function aprobarSeleccionada() {
       {
         comentario:
           comentarioDecision.value || null,
-        codigo,
+        codigo: esRegistro ? '' : codigo,
       },
     );
 
@@ -159,7 +205,7 @@ async function aprobarSeleccionada() {
 
     mensaje.value =
       respuesta.mensaje ||
-      'El documento fue aprobado y publicado.';
+      'La solicitud fue aprobada correctamente.';
   } catch (err) {
     error.value =
       err.message ||
@@ -309,7 +355,7 @@ onMounted(cargarSolicitudes);
               <th>FOLIO</th>
               <th>DOCUMENTO</th>
               <th>TIPO</th>
-              <th>VERSIÓN</th>
+              <th>VERSIÓN / FECHA</th>
               <th>SOLICITANTE</th>
               <th>ESTADO</th>
               <th>ACCIONES</th>
@@ -328,7 +374,15 @@ onMounted(cargarSolicitudes);
 
               <td>{{ solicitud.tipo_solicitud }}</td>
 
-              <td>v{{ solicitud.version }}</td>
+              <td>
+                <template v-if="solicitud.es_registro">
+                  {{ formatearFecha(solicitud.fecha_registro) }}
+                </template>
+
+                <template v-else>
+                  v{{ solicitud.version }}
+                </template>
+              </td>
 
               <td>{{ solicitud.solicitante }}</td>
 
@@ -342,9 +396,14 @@ onMounted(cargarSolicitudes);
                   <AppIcon name="search" :size="14" />
 
                   {{
-                    accionArchivo === `pdf-${solicitud.id}`
-                      ? 'Abriendo...'
-                      : 'Ver PDF'
+                    accionArchivo ===
+                      `${solicitud.es_registro ? 'registro' : 'pdf'}-${solicitud.id}`
+                      ? solicitud.es_registro
+                        ? 'Descargando...'
+                        : 'Abriendo...'
+                      : solicitud.es_registro
+                        ? 'Descargar evidencia'
+                        : 'Ver PDF'
                   }}
                 </button>
                 <button v-if="solicitud.puede_atender" class="btn btn-primary btn-sm" type="button"
@@ -375,7 +434,8 @@ onMounted(cargarSolicitudes);
 
         <div class="modal-body">
           <label v-if="
-            solicitudSeleccionada?.estado === 'en_aprobador'
+            solicitudSeleccionada?.estado === 'en_aprobador' &&
+            !solicitudSeleccionada?.es_registro
           " class="campo">
             <span>Código institucional *</span>
 
@@ -443,7 +503,9 @@ onMounted(cargarSolicitudes);
               {{
                 procesandoDecision
                   ? 'Aprobando...'
-                  : 'Aprobar y publicar'
+                  : solicitudSeleccionada?.es_registro
+                    ? 'Aprobar registro'
+                    : 'Aprobar y publicar'
               }}
             </button>
           </div>
@@ -614,5 +676,4 @@ onMounted(cargarSolicitudes);
   color: #fff;
   background: var(--danger);
 }
-
 </style>

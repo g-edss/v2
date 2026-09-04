@@ -27,8 +27,9 @@ services:
       - ./database/migrations/007_tipos_documentos.sql:/docker-entrypoint-initdb.d/007_tipos_documentos.sql:ro
       - ./database/migrations/008_flujo_documental.sql:/docker-entrypoint-initdb.d/008_flujo_documental.sql:ro
       - ./database/migrations/009_correcciones_documentales.sql:/docker-entrypoint-initdb.d/009_correcciones_documentales.sql:ro
-      - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/010_catalogos.sql:ro
-      - ./database/seeds/002_unidades_medida.sql:/docker-entrypoint-initdb.d/011_unidades_medida.sql:ro
+      - ./database/migrations/010_almacen_registros.sql:/docker-entrypoint-initdb.d/010_almacen_registros.sql:ro
+      - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/011_catalogos.sql:ro
+      - ./database/seeds/002_unidades_medida.sql:/docker-entrypoint-initdb.d/012_unidades_medida.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s

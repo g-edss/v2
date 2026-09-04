@@ -41,52 +41,65 @@ function validarUsuarioAsignado(
 
 export async function listarSolicitudes({
     usuarioId,
-    rol,
+    rol
 }) {
     const { rows } = await pool.query(
         `SELECT
-       s.id,
-       s.estado,
-       s.creado_en,
-       s.documento_id,
-       s.version_documento_id,
-       d.codigo,
-       d.nombre AS documento,
-       dv.version,
-       ts.nombre AS tipo_solicitud,
-        u.nombre AS solicitante,
-        (
+            s.id,
+            s.estado,
+            s.creado_en,
+            s.documento_id,
+            s.version_documento_id,
+            s.registro_id,
+            d.codigo,
+            COALESCE(
+                d.nombre,
+                registro.nombre
+            ) AS documento,
+            dv.version,
+            registro.fecha_registro,
+            registro.nombre_archivo,
+            (s.registro_id IS NOT NULL) AS es_registro,
+            ts.nombre AS tipo_solicitud,
+            u.nombre AS solicitante,
             (
-                s.estado = 'en_responsable'
-                AND s.responsable_asignado_id = $1
-            )
-            OR (
-                s.estado = 'en_revisor'
-                AND s.revisor_asignado_id = $1
-            )
-            OR (
-                s.estado = 'en_aprobador'
-                AND s.aprobador_asignado_id = $1
+                (
+                    s.estado = 'en_responsable'
+                    AND s.responsable_asignado_id = $1
+                )
+                OR (
+                    s.estado = 'en_revisor'
+                    AND s.revisor_asignado_id = $1
+                )
+                OR (
+                    s.estado = 'en_aprobador'
+                    AND s.aprobador_asignado_id = $1
                 )
             ) AS puede_atender
-     FROM solicitudes s
-     JOIN tipos_solicitud ts
-       ON ts.id = s.tipo_solicitud_id
-     JOIN documentos d
-       ON d.id = s.documento_id
-     JOIN documento_versiones dv
-       ON dv.id = s.version_documento_id
-     JOIN usuarios u
-       ON u.id = s.solicitante_id
-     WHERE
-       $2 = 'admin_general'
-       OR s.solicitante_id = $1
-       OR d.elaborador_id = $1
-       OR s.responsable_asignado_id = $1
-       OR s.revisor_asignado_id = $1
-       OR s.aprobador_asignado_id = $1
-     ORDER BY s.creado_en DESC, s.id DESC`,
-        [usuarioId, rol],
+        FROM solicitudes s
+        JOIN tipos_solicitud ts
+            ON ts.id = s.tipo_solicitud_id
+        LEFT JOIN documentos d
+            ON d.id = s.documento_id
+        LEFT JOIN documento_versiones dv
+            ON dv.id = s.version_documento_id
+        LEFT JOIN registros registro
+            ON registro.id = s.registro_id
+        JOIN usuarios u
+            ON u.id = s.solicitante_id
+        WHERE
+            $2 = 'admin_general'
+            OR s.solicitante_id = $1
+            OR d.elaborador_id = $1
+            OR registro.creado_por = $1
+            OR registro.responsable_id = $1
+            OR s.responsable_asignado_id = $1
+            OR s.revisor_asignado_id = $1
+            OR s.aprobador_asignado_id = $1
+        ORDER BY
+            s.creado_en DESC,
+            s.id DESC`,
+        [usuarioId, rol]
     );
 
     return rows;
@@ -106,6 +119,7 @@ export async function avanzarSolicitud({
             `SELECT
                 s.id,
                 s.estado,
+                s.registro_id,
                 s.responsable_asignado_id,
                 s.revisor_asignado_id,
                 s.aprobador_asignado_id
@@ -203,10 +217,14 @@ export async function avanzarSolicitud({
             ],
         );
 
+        const tipoElemento = solicitud.registro_id
+            ? 'registro'
+            : 'documento';
+
         const mensajeNotificacion =
             estadoSiguiente === 'en_revisor'
-                ? 'Tienes un documento pendiente de revisión.'
-                : 'Tienes un documento pendiente de aprobación.';
+                ? `Tienes un ${tipoElemento} pendiente de revisión.`
+                : `Tienes un ${tipoElemento} pendiente de aprobación.`;
 
         await client.query(
             `INSERT INTO notificaciones (
@@ -241,24 +259,11 @@ export async function aprobarSolicitud({
     solicitudId,
     usuarioId,
     comentario,
-    codigo,
+    codigo
 }) {
     const codigoNormalizado =
         String(codigo || '').trim().toUpperCase();
 
-    if (!codigoNormalizado) {
-        throw crearError(
-            'Debes asignar el código institucional.',
-            400,
-        );
-    }
-
-    if (codigoNormalizado.length > 60) {
-        throw crearError(
-            'El código debe tener máximo 60 caracteres.',
-            400,
-        );
-    }
     const client = await pool.connect();
 
     try {
@@ -266,18 +271,22 @@ export async function aprobarSolicitud({
 
         const { rows } = await client.query(
             `SELECT
-         s.id,
-         s.estado,
-         s.documento_id,
-         s.version_documento_id,
-        s.aprobador_asignado_id,
-        d.elaborador_id
-        FROM solicitudes s
-        JOIN documentos d
-        ON d.id = s.documento_id
-        WHERE s.id = $1
-       FOR UPDATE`,
-            [solicitudId],
+                s.id,
+                s.estado,
+                s.documento_id,
+                s.version_documento_id,
+                s.registro_id,
+                s.aprobador_asignado_id,
+                d.elaborador_id,
+                registro.creado_por AS registro_creado_por
+            FROM solicitudes s
+            LEFT JOIN documentos d
+                ON d.id = s.documento_id
+            LEFT JOIN registros registro
+                ON registro.id = s.registro_id
+            WHERE s.id = $1
+            FOR UPDATE OF s`,
+            [solicitudId]
         );
 
         const solicitud = rows[0];
@@ -285,14 +294,14 @@ export async function aprobarSolicitud({
         if (!solicitud) {
             throw crearError(
                 'La solicitud no existe.',
-                404,
+                404
             );
         }
 
         if (solicitud.estado !== 'en_aprobador') {
             throw crearError(
                 'La solicitud ya fue atendida o no está lista para aprobar.',
-                409,
+                409
             );
         }
 
@@ -302,39 +311,79 @@ export async function aprobarSolicitud({
         ) {
             throw crearError(
                 'Esta solicitud no está asignada al usuario actual.',
-                403,
+                403
             );
         }
 
-        await client.query(
-            `UPDATE documento_versiones
-            SET vigente = (id = $2)
-            WHERE documento_id = $1`,
-            [
-                solicitud.documento_id,
-                solicitud.version_documento_id,
-            ],
-        );
+        const esRegistro =
+            solicitud.registro_id !== null;
 
-        await client.query(
-            `UPDATE documentos
-            SET estado = 'vigente',
-                codigo = $2
-            WHERE id = $1`,
-            [
-                solicitud.documento_id,
-                codigoNormalizado,
-            ],
-        );
+        if (
+            !esRegistro &&
+            !codigoNormalizado
+        ) {
+            throw crearError(
+                'Debes asignar el código institucional.',
+                400
+            );
+        }
+
+        if (codigoNormalizado.length > 60) {
+            throw crearError(
+                'El código debe tener máximo 60 caracteres.',
+                400
+            );
+        }
+
+        if (esRegistro) {
+            await client.query(
+                `UPDATE registros
+                SET
+                    estado = 'aprobado',
+                    actualizado_en = NOW()
+                WHERE id = $1`,
+                [solicitud.registro_id]
+            );
+        } else {
+            await client.query(
+                `UPDATE documento_versiones
+                SET vigente = (id = $2)
+                WHERE documento_id = $1`,
+                [
+                    solicitud.documento_id,
+                    solicitud.version_documento_id
+                ]
+            );
+
+            await client.query(
+                `UPDATE documentos
+                SET
+                    estado = 'vigente',
+                    codigo = $2
+                WHERE id = $1`,
+                [
+                    solicitud.documento_id,
+                    codigoNormalizado
+                ]
+            );
+        }
 
         await client.query(
             `UPDATE solicitudes
             SET
                 estado = 'aprobada',
-                actualizado_en = now()
+                actualizado_en = NOW()
             WHERE id = $1`,
-            [solicitud.id],
+            [solicitud.id]
         );
+
+        const comentarioHistorial =
+            comentario ||
+            (
+                esRegistro
+                    ? 'Registro aprobado sin observaciones.'
+                    : 'Documento aprobado sin observaciones.'
+            );
 
         await client.query(
             `INSERT INTO solicitud_historial (
@@ -343,14 +392,30 @@ export async function aprobarSolicitud({
                 actor_id,
                 comentario
             )
-            VALUES ($1, 'aprobada', $2, $3)`,
+            VALUES (
+                $1,
+                'aprobada',
+                $2,
+                $3
+            )`,
             [
                 solicitud.id,
                 usuarioId,
-                comentario ||
-                'Documento aprobado sin observaciones.',
-            ],
+                comentarioHistorial
+            ]
         );
+
+        const destinatario = esRegistro
+            ? solicitud.registro_creado_por
+            : solicitud.elaborador_id;
+
+        const mensajeNotificacion = esRegistro
+            ? 'Tu registro fue aprobado.'
+            : 'Tu documento fue aprobado y publicado.';
+
+        const enlaceNotificacion = esRegistro
+            ? '/almacen-registros'
+            : '/visor-documental';
 
         await client.query(
             `INSERT INTO notificaciones (
@@ -360,10 +425,10 @@ export async function aprobarSolicitud({
             )
             VALUES ($1, $2, $3)`,
             [
-                solicitud.elaborador_id,
-                'Tu documento fue aprobado y publicado.',
-                '/visor-documental',
-            ],
+                destinatario,
+                mensajeNotificacion,
+                enlaceNotificacion
+            ]
         );
 
         await client.query('COMMIT');
@@ -371,6 +436,7 @@ export async function aprobarSolicitud({
         return {
             ...solicitud,
             estado: 'aprobada',
+            es_registro: esRegistro
         };
     } catch (error) {
         await client.query('ROLLBACK');
@@ -381,7 +447,7 @@ export async function aprobarSolicitud({
         ) {
             throw crearError(
                 'Ya existe un documento con ese código institucional.',
-                409,
+                409
             );
         }
 
@@ -394,7 +460,7 @@ export async function aprobarSolicitud({
 export async function solicitarCorrecciones({
     solicitudId,
     usuarioId,
-    comentario,
+    comentario
 }) {
     const client = await pool.connect();
 
@@ -403,20 +469,24 @@ export async function solicitarCorrecciones({
 
         const { rows } = await client.query(
             `SELECT
-         s.id,
-         s.estado,
-         s.documento_id,
-         s.version_documento_id,
-        s.responsable_asignado_id,
-        s.revisor_asignado_id,
-        s.aprobador_asignado_id,
-        d.elaborador_id
-        FROM solicitudes s
-        JOIN documentos d
-        ON d.id = s.documento_id
-        WHERE s.id = $1
-       FOR UPDATE`,
-            [solicitudId],
+                s.id,
+                s.estado,
+                s.documento_id,
+                s.version_documento_id,
+                s.registro_id,
+                s.responsable_asignado_id,
+                s.revisor_asignado_id,
+                s.aprobador_asignado_id,
+                d.elaborador_id,
+                registro.creado_por AS registro_creado_por
+            FROM solicitudes s
+            LEFT JOIN documentos d
+                ON d.id = s.documento_id
+            LEFT JOIN registros registro
+                ON registro.id = s.registro_id
+            WHERE s.id = $1
+            FOR UPDATE OF s`,
+            [solicitudId]
         );
 
         const solicitud = rows[0];
@@ -424,7 +494,7 @@ export async function solicitarCorrecciones({
         if (!solicitud) {
             throw crearError(
                 'La solicitud no existe.',
-                404,
+                404
             );
         }
 
@@ -432,39 +502,56 @@ export async function solicitarCorrecciones({
             ![
                 'en_responsable',
                 'en_revisor',
-                'en_aprobador',
+                'en_aprobador'
             ].includes(solicitud.estado)
         ) {
             throw crearError(
                 'La solicitud ya fue atendida o no está lista.',
-                409,
+                409
             );
         }
 
-        validarUsuarioAsignado(solicitud, usuarioId);
+        validarUsuarioAsignado(
+            solicitud,
+            usuarioId
+        );
 
         if (!comentario) {
             throw crearError(
                 'Debes explicar qué correcciones se requieren.',
-                400,
+                400
             );
         }
+
+        const esRegistro =
+            solicitud.registro_id !== null;
 
         await client.query(
             `UPDATE solicitudes
             SET
                 estado = 'correcciones',
-                actualizado_en = now()
+                actualizado_en = NOW()
             WHERE id = $1`,
-            [solicitud.id],
+            [solicitud.id]
         );
 
-        await client.query(
-            `UPDATE documentos
-            SET estado = 'borrador'
-            WHERE id = $1`,
-            [solicitud.documento_id],
-        );
+        if (esRegistro) {
+            await client.query(
+                `UPDATE registros
+                SET
+                    estado = 'correcciones',
+                    actualizado_en = NOW()
+                WHERE id = $1`,
+                [solicitud.registro_id]
+            );
+        } else {
+            await client.query(
+                `UPDATE documentos
+                SET estado = 'borrador'
+                WHERE id = $1`,
+                [solicitud.documento_id]
+            );
+        }
 
         await client.query(
             `INSERT INTO solicitud_historial (
@@ -473,13 +560,30 @@ export async function solicitarCorrecciones({
                 actor_id,
                 comentario
             )
-            VALUES ($1, 'correcciones', $2, $3)`,
+            VALUES (
+                $1,
+                'correcciones',
+                $2,
+                $3
+            )`,
             [
                 solicitud.id,
                 usuarioId,
-                comentario,
-            ],
+                comentario
+            ]
         );
+
+        const destinatario = esRegistro
+            ? solicitud.registro_creado_por
+            : solicitud.elaborador_id;
+
+        const mensajeNotificacion = esRegistro
+            ? `El registro requiere correcciones: ${comentario}`
+            : `El documento requiere correcciones: ${comentario}`;
+
+        const enlaceNotificacion = esRegistro
+            ? '/almacen-registros'
+            : '/solicitudes';
 
         await client.query(
             `INSERT INTO notificaciones (
@@ -489,10 +593,10 @@ export async function solicitarCorrecciones({
             )
             VALUES ($1, $2, $3)`,
             [
-                solicitud.elaborador_id,
-                `El documento requiere correcciones: ${comentario}`,
-                '/solicitudes',
-            ],
+                destinatario,
+                mensajeNotificacion,
+                enlaceNotificacion
+            ]
         );
 
         await client.query('COMMIT');
@@ -500,6 +604,7 @@ export async function solicitarCorrecciones({
         return {
             ...solicitud,
             estado: 'correcciones',
+            es_registro: esRegistro
         };
     } catch (error) {
         await client.query('ROLLBACK');
@@ -512,7 +617,7 @@ export async function solicitarCorrecciones({
 export async function rechazarSolicitud({
     solicitudId,
     usuarioId,
-    comentario,
+    comentario
 }) {
     const client = await pool.connect();
 
@@ -521,20 +626,24 @@ export async function rechazarSolicitud({
 
         const { rows } = await client.query(
             `SELECT
-         s.id,
-         s.estado,
-         s.documento_id,
-         s.version_documento_id,
-        s.responsable_asignado_id,
-        s.revisor_asignado_id,
-        s.aprobador_asignado_id,
-        d.elaborador_id
-        FROM solicitudes s
-        JOIN documentos d
-        ON d.id = s.documento_id
-        WHERE s.id = $1
-       FOR UPDATE`,
-            [solicitudId],
+                s.id,
+                s.estado,
+                s.documento_id,
+                s.version_documento_id,
+                s.registro_id,
+                s.responsable_asignado_id,
+                s.revisor_asignado_id,
+                s.aprobador_asignado_id,
+                d.elaborador_id,
+                registro.creado_por AS registro_creado_por
+            FROM solicitudes s
+            LEFT JOIN documentos d
+                ON d.id = s.documento_id
+            LEFT JOIN registros registro
+                ON registro.id = s.registro_id
+            WHERE s.id = $1
+            FOR UPDATE OF s`,
+            [solicitudId]
         );
 
         const solicitud = rows[0];
@@ -542,7 +651,7 @@ export async function rechazarSolicitud({
         if (!solicitud) {
             throw crearError(
                 'La solicitud no existe.',
-                404,
+                404
             );
         }
 
@@ -550,39 +659,56 @@ export async function rechazarSolicitud({
             ![
                 'en_responsable',
                 'en_revisor',
-                'en_aprobador',
+                'en_aprobador'
             ].includes(solicitud.estado)
         ) {
             throw crearError(
                 'La solicitud ya fue atendida o no está lista.',
-                409,
+                409
             );
         }
 
-        validarUsuarioAsignado(solicitud, usuarioId);
+        validarUsuarioAsignado(
+            solicitud,
+            usuarioId
+        );
 
         if (!comentario) {
             throw crearError(
                 'Debes explicar el motivo del rechazo.',
-                400,
+                400
             );
         }
 
-        await client.query(
-            `UPDATE solicitudes
-   SET
-     estado = 'rechazada',
-     actualizado_en = now()
-   WHERE id = $1`,
-            [solicitud.id],
-        );
+        const esRegistro =
+            solicitud.registro_id !== null;
 
         await client.query(
-            `UPDATE documentos
-            SET estado = 'rechazado'
+            `UPDATE solicitudes
+            SET
+                estado = 'rechazada',
+                actualizado_en = NOW()
             WHERE id = $1`,
-            [solicitud.documento_id],
+            [solicitud.id]
         );
+
+        if (esRegistro) {
+            await client.query(
+                `UPDATE registros
+                SET
+                    estado = 'rechazado',
+                    actualizado_en = NOW()
+                WHERE id = $1`,
+                [solicitud.registro_id]
+            );
+        } else {
+            await client.query(
+                `UPDATE documentos
+                SET estado = 'rechazado'
+                WHERE id = $1`,
+                [solicitud.documento_id]
+            );
+        }
 
         await client.query(
             `INSERT INTO solicitud_historial (
@@ -591,13 +717,30 @@ export async function rechazarSolicitud({
                 actor_id,
                 comentario
             )
-            VALUES ($1, 'rechazada', $2, $3)`,
+            VALUES (
+                $1,
+                'rechazada',
+                $2,
+                $3
+            )`,
             [
                 solicitud.id,
                 usuarioId,
-                comentario,
-            ],
+                comentario
+            ]
         );
+
+        const destinatario = esRegistro
+            ? solicitud.registro_creado_por
+            : solicitud.elaborador_id;
+
+        const mensajeNotificacion = esRegistro
+            ? `Tu registro fue rechazado: ${comentario}`
+            : `Tu documento fue rechazado: ${comentario}`;
+
+        const enlaceNotificacion = esRegistro
+            ? '/almacen-registros'
+            : '/solicitudes';
 
         await client.query(
             `INSERT INTO notificaciones (
@@ -607,10 +750,10 @@ export async function rechazarSolicitud({
             )
             VALUES ($1, $2, $3)`,
             [
-                solicitud.elaborador_id,
-                `Tu documento fue rechazado: ${comentario}`,
-                '/solicitudes',
-            ],
+                destinatario,
+                mensajeNotificacion,
+                enlaceNotificacion
+            ]
         );
 
         await client.query('COMMIT');
@@ -618,6 +761,7 @@ export async function rechazarSolicitud({
         return {
             ...solicitud,
             estado: 'rechazada',
+            es_registro: esRegistro
         };
     } catch (error) {
         await client.query('ROLLBACK');
