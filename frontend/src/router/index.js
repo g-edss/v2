@@ -19,6 +19,8 @@ const routes = [
       { path: 'auditores',           name: 'auditores',            component: () => import('@/views/AuditoresView.vue') },
       { path: 'indicadores',         name: 'indicadores',          component: () => import('@/views/IndicadoresView.vue') },
       { path: 'acciones-correctivas',name: 'acciones-correctivas', component: () => import('@/views/AccionesCorrectivas.vue') },
+      { path: 'tipo-indicador',      name: 'tipo-indicador',       component: () => import('@/views/TipoIndicadorView.vue') },
+      { path: 'unidad-medida',       name: 'unidad-medida',        component: () => import('@/views/UnidadMedidaView.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

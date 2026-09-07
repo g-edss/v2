@@ -4,6 +4,7 @@ import AppIcon from './AppIcon.vue';
 
 const catalogosAbierto  = ref(false);
 const gestionAbierto    = ref(false);
+const indicadoresAbierto = ref(false);
 </script>
 
 <template>
@@ -12,10 +13,8 @@ const gestionAbierto    = ref(false);
     <div class="brand">
       <div class="brand-mark">
         <svg width="24" height="24" viewBox="0 0 32 32">
-          <path d="M16 4l10 5v7c0 6.2-4.2 10.5-10 12.5C10.2 26.5 6 22.2 6 16V9l10-5z"
-                fill="#fff" opacity=".95"/>
-          <path d="M11 16.5l3.2 3.2L21 13" fill="none" stroke="#1b7a43"
-                stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M16 4l10 5v7c0 6.2-4.2 10.5-10 12.5C10.2 26.5 6 22.2 6 16V9l10-5z" fill="#fff" opacity=".95"/>
+          <path d="M11 16.5l3.2 3.2L21 13" fill="none" stroke="#1b7a43" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
       <div class="brand-text">
@@ -37,36 +36,40 @@ const gestionAbierto    = ref(false);
       <div class="nav-section">MÓDULOS</div>
 
       <!-- Control General -->
-      <button class="nav-item nav-item--btn" :class="{ active: catalogosAbierto }"
-              @click="catalogosAbierto = !catalogosAbierto">
+      <button class="nav-item nav-item--btn" :class="{ active: catalogosAbierto }" @click="catalogosAbierto = !catalogosAbierto">
         <AppIcon name="dashboard" :size="18" /><span>Control General</span>
-        <svg class="chevron" :class="{ rotado: catalogosAbierto }" width="14" height="14"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="chevron" :class="{ rotado: catalogosAbierto }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
       </button>
       <div v-if="catalogosAbierto" class="submenu">
-        <RouterLink to="/usuarios"     class="sub-item" active-class="active"><AppIcon name="meeting"  :size="15" /> Catálogo de Usuarios</RouterLink>
-        <RouterLink to="/procesos"     class="sub-item" active-class="active"><AppIcon name="process"  :size="15" /> Catálogo de Procesos</RouterLink>
-        <RouterLink to="/auditores"    class="sub-item" active-class="active"><AppIcon name="audit"    :size="15" /> Catálogo de Auditores</RouterLink>
-        <RouterLink to="/indicadores"  class="sub-item" active-class="active"><AppIcon name="doc"      :size="15" /> Catálogo de Indicadores</RouterLink>
+        <RouterLink to="/usuarios"    class="sub-item" active-class="active"><AppIcon name="meeting" :size="15" /> Catálogo de Usuarios</RouterLink>
+        <RouterLink to="/procesos"    class="sub-item" active-class="active"><AppIcon name="process" :size="15" /> Catálogo de Procesos</RouterLink>
+        <RouterLink to="/auditores"   class="sub-item" active-class="active"><AppIcon name="audit"   :size="15" /> Catálogo de Auditores</RouterLink>
+      </div>
+
+      <!-- Indicadores -->
+      <button class="nav-item nav-item--btn" :class="{ active: indicadoresAbierto }" @click="indicadoresAbierto = !indicadoresAbierto">
+        <AppIcon name="doc" :size="18" /><span>Indicadores</span>
+        <svg class="chevron" :class="{ rotado: indicadoresAbierto }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div v-if="indicadoresAbierto" class="submenu">
+        <RouterLink to="/indicadores"   class="sub-item" active-class="active"><AppIcon name="doc" :size="15" /> Catálogo de Indicadores</RouterLink>
+        <RouterLink to="/tipo-indicador" class="sub-item" active-class="active"><AppIcon name="doc" :size="15" /> Tipos de Indicador</RouterLink>
+        <RouterLink to="/unidad-medida"  class="sub-item" active-class="active"><AppIcon name="doc" :size="15" /> Unidades de Medida</RouterLink>
       </div>
 
       <!-- Gestión de Calidad -->
-      <button class="nav-item nav-item--btn" :class="{ active: gestionAbierto }"
-              @click="gestionAbierto = !gestionAbierto">
+      <button class="nav-item nav-item--btn" :class="{ active: gestionAbierto }" @click="gestionAbierto = !gestionAbierto">
         <AppIcon name="audit" :size="18" /><span>Gestión de Calidad</span>
-        <svg class="chevron" :class="{ rotado: gestionAbierto }" width="14" height="14"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="chevron" :class="{ rotado: gestionAbierto }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
       </button>
       <div v-if="gestionAbierto" class="submenu">
-        <RouterLink to="/auditorias"           class="sub-item" active-class="active"><AppIcon name="audit"   :size="15" /> Auditorías</RouterLink>
-        <RouterLink to="/acciones-correctivas" class="sub-item" active-class="active"><AppIcon name="check"   :size="15" /> Acciones Correctivas</RouterLink>
+        <RouterLink to="/auditorias"            class="sub-item" active-class="active"><AppIcon name="audit" :size="15" /> Auditorías</RouterLink>
+        <RouterLink to="/acciones-correctivas"  class="sub-item" active-class="active"><AppIcon name="check" :size="15" /> Acciones Correctivas</RouterLink>
       </div>
 
-      <RouterLink to="/documentos"   class="nav-item" active-class="active"><AppIcon name="doc"     :size="18" /><span>Control de Documentos</span></RouterLink>
-      <RouterLink to="/solicitudes"  class="nav-item" active-class="active"><AppIcon name="request" :size="18" /><span>Solicitudes y Cambios</span></RouterLink>
-      <RouterLink to="/juntas"       class="nav-item" active-class="active"><AppIcon name="meeting" :size="18" /><span>Juntas y Sesiones</span></RouterLink>
+      <RouterLink to="/documentos"  class="nav-item" active-class="active"><AppIcon name="doc"     :size="18" /><span>Control de Documentos</span></RouterLink>
+      <RouterLink to="/solicitudes" class="nav-item" active-class="active"><AppIcon name="request" :size="18" /><span>Solicitudes y Cambios</span></RouterLink>
+      <RouterLink to="/juntas"      class="nav-item" active-class="active"><AppIcon name="meeting" :size="18" /><span>Juntas y Sesiones</span></RouterLink>
 
     </nav>
 
