@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue';
 import { api } from '@/api/client.js';
 import { useAuthStore } from '@/stores/auth.js';
 import AppIcon from '@/components/AppIcon.vue';
-import BaseCard from '@/components/BaseCard.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 
 const auth = useAuthStore();
@@ -11,6 +10,9 @@ const registros = ref([]);
 const cargando = ref(false);
 const error = ref('');
 const procesos = ref([]);
+const busqueda = ref('');
+const procesoSeleccionado = ref('');
+const registroSeleccionadoId = ref('');
 const responsables = ref([]);
 const revisores = ref([]);
 const aprobadores = ref([]);
@@ -41,6 +43,88 @@ const puedeCrear = computed(() =>
     auth.usuario?.rol_clave
   )
 );
+
+function normalizarTexto(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+const procesosDisponibles = computed(() => {
+  const procesosUnicos = new Map();
+
+  registros.value.forEach((registro) => {
+    if (registro.proceso_id && registro.proceso) {
+      procesosUnicos.set(
+        String(registro.proceso_id),
+        {
+          id: String(registro.proceso_id),
+          nombre: registro.proceso
+        }
+      );
+    }
+  });
+
+  return Array.from(procesosUnicos.values())
+    .sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, 'es')
+    );
+});
+
+const registrosFiltrados = computed(() => {
+  const texto = normalizarTexto(busqueda.value);
+
+  return registros.value.filter((registro) => {
+    const coincideProceso =
+      !procesoSeleccionado.value ||
+      String(registro.proceso_id) ===
+      procesoSeleccionado.value;
+
+    const contenidoRegistro = normalizarTexto([
+      registro.nombre,
+      registro.proceso,
+      registro.responsable,
+      registro.responsable_correo,
+      registro.nombre_archivo,
+      registro.estado
+    ].join(' '));
+
+    const coincideBusqueda =
+      !texto ||
+      contenidoRegistro.includes(texto);
+
+    return coincideProceso && coincideBusqueda;
+  });
+});
+
+const registrosVisibles = computed(() => {
+  const hayBusqueda = normalizarTexto(busqueda.value);
+
+  if (!hayBusqueda && !procesoSeleccionado.value) {
+    return [];
+  }
+
+  return registrosFiltrados.value;
+});
+
+const registroSeleccionado = computed(() =>
+  registros.value.find(
+    (registro) =>
+      String(registro.id) ===
+      registroSeleccionadoId.value
+  ) || null
+);
+
+function seleccionarProceso(procesoId) {
+  procesoSeleccionado.value = String(procesoId);
+  registroSeleccionadoId.value = '';
+}
+
+function seleccionarRegistro(registroId) {
+  registroSeleccionadoId.value = String(registroId);
+}
 
 function obtenerFechaActual() {
   const fecha = new Date();
@@ -371,78 +455,143 @@ onMounted(cargarRegistros);
       {{ error }}
     </p>
 
-    <BaseCard>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Proceso</th>
-            <th>Responsable</th>
-            <th>Fecha</th>
-            <th>Archivo</th>
-            <th>Estado</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
+    <div class="buscador-registros">
+      <AppIcon name="search" :size="18" />
 
-        <tbody>
-          <tr v-if="cargando">
-            <td colspan="7" class="table-message">
-              Cargando registros...
-            </td>
-          </tr>
+      <input v-model="busqueda" type="search" placeholder="Buscar registro, responsable o archivo" />
+    </div>
 
-          <tr v-else-if="registros.length === 0">
-            <td colspan="7" class="table-message">
-              No hay registros disponibles.
-            </td>
-          </tr>
+    <div class="navegador-registros">
+      <section class="panel-registros">
+        <h2>Proceso</h2>
 
-          <tr v-for="registro in registros" v-else :key="registro.id">
-            <td>
+        <p v-if="procesosDisponibles.length === 0" class="mensaje-panel">
+          No hay procesos con registros disponibles.
+        </p>
+
+        <div v-else class="lista-opciones">
+          <button v-for="proceso in procesosDisponibles" :key="proceso.id" class="opcion-navegacion" :class="{
+            activa:
+              procesoSeleccionado === proceso.id
+          }" type="button" @click="seleccionarProceso(proceso.id)">
+            <span>{{ proceso.nombre }}</span>
+            <span aria-hidden="true">›</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel-registros">
+        <h2>Registros</h2>
+
+        <p v-if="cargando" class="mensaje-panel">
+          Cargando registros...
+        </p>
+
+        <p v-else-if="
+          !busqueda &&
+          !procesoSeleccionado
+        " class="mensaje-panel">
+          Selecciona primero un proceso.
+        </p>
+
+        <p v-else-if="registrosVisibles.length === 0" class="mensaje-panel">
+          No hay registros que coincidan con la selección.
+        </p>
+
+        <div v-else class="lista-opciones">
+          <button v-for="registro in registrosVisibles" :key="registro.id" class="opcion-navegacion opcion-registro"
+            :class="{
+              activa:
+                registroSeleccionadoId ===
+                String(registro.id)
+            }" type="button" @click="seleccionarRegistro(registro.id)">
+            <span>
               <strong>{{ registro.nombre }}</strong>
-            </td>
-            <td>{{ registro.proceso }}</td>
-            <td>
-              <div>{{ registro.responsable }}</div>
-              <small class="muted">
-                {{ registro.responsable_correo }}
+
+              <small>
+                {{ formatearFecha(registro.fecha_registro) }}
               </small>
-            </td>
-            <td>
-              {{ formatearFecha(registro.fecha_registro) }}
-            </td>
-            <td>
-              <button v-if="registro.nombre_archivo" type="button" class="btn btn-ghost btn-archivo"
-                :disabled="descargandoId === registro.id" @click="descargarArchivo(registro)">
-                <AppIcon name="doc" :size="15" />
+            </span>
 
+            <span aria-hidden="true">›</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel-registros panel-detalle">
+        <h2>Detalle y acciones</h2>
+
+        <p v-if="!registroSeleccionado" class="mensaje-panel">
+          Selecciona un registro para consultar su información.
+        </p>
+
+        <div v-else class="detalle-registro">
+          <div class="encabezado-registro">
+            <div>
+              <strong>{{ registroSeleccionado.nombre }}</strong>
+
+              <p>{{ registroSeleccionado.proceso }}</p>
+            </div>
+
+            <StatusBadge :estado="registroSeleccionado.estado" />
+          </div>
+
+          <dl class="datos-registro">
+            <div>
+              <dt>Responsable</dt>
+              <dd>
+                {{ registroSeleccionado.responsable }}
+              </dd>
+            </div>
+
+            <div>
+              <dt>Correo</dt>
+              <dd>
+                {{ registroSeleccionado.responsable_correo }}
+              </dd>
+            </div>
+
+            <div>
+              <dt>Fecha</dt>
+              <dd>
                 {{
-                  descargandoId === registro.id
-                    ? 'Descargando...'
-                    : registro.nombre_archivo
+                  formatearFecha(
+                    registroSeleccionado.fecha_registro
+                  )
                 }}
-              </button>
+              </dd>
+            </div>
 
-              <span v-else>—</span>
-            </td>
-            <td>
-              <StatusBadge :estado="registro.estado" />
-            </td>
-            <td>
-              <button v-if="
-                puedeCrear &&
-                registro.estado === 'borrador'
-              " type="button" class="btn btn-primary" @click="abrirRevision(registro)">
-                Enviar a aprobación
-              </button>
+            <div v-if="registroSeleccionado.descripcion">
+              <dt>Descripción</dt>
+              <dd>
+                {{ registroSeleccionado.descripcion }}
+              </dd>
+            </div>
+          </dl>
 
-              <span v-else>—</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </BaseCard>
+          <div class="acciones-registro">
+            <button v-if="registroSeleccionado.nombre_archivo" type="button" class="btn btn-ghost" :disabled="descargandoId === registroSeleccionado.id
+              " @click="descargarArchivo(registroSeleccionado)">
+              <AppIcon name="doc" :size="15" />
+
+              {{
+                descargandoId === registroSeleccionado.id
+                  ? 'Descargando...'
+                  : 'Descargar archivo'
+              }}
+            </button>
+
+            <button v-if="
+              puedeCrear &&
+              registroSeleccionado.estado === 'borrador'
+            " type="button" class="btn btn-primary" @click="abrirRevision(registroSeleccionado)">
+              Enviar a aprobación
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
     <div v-if="formularioAbierto" class="overlay" @click.self="cerrarFormulario">
       <div class="modal">
         <div class="modal-head">
@@ -648,6 +797,206 @@ onMounted(cargarRegistros);
   padding: 32px 16px;
   color: var(--gray-500);
   text-align: center;
+}
+
+.buscador-registros {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  padding: 0 14px;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: white;
+  color: var(--gray-500);
+}
+
+.buscador-registros:focus-within {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-100);
+}
+
+.buscador-registros input {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--gray-900);
+  font: inherit;
+  outline: none;
+}
+
+.navegador-registros {
+  display: grid;
+  grid-template-columns:
+    minmax(210px, 0.8fr) minmax(260px, 1fr) minmax(360px, 1.5fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.panel-registros {
+  min-width: 0;
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 5%);
+}
+
+.panel-registros h2 {
+  margin: 0;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--gray-200);
+  color: var(--gray-900);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.lista-opciones {
+  display: grid;
+  max-height: 430px;
+  overflow-y: auto;
+}
+
+.opcion-navegacion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--gray-100);
+  background: white;
+  color: var(--gray-700);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.opcion-navegacion:hover {
+  background: var(--gray-100);
+  color: var(--brand-700);
+}
+
+.opcion-navegacion.activa {
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+
+.opcion-registro>span:first-child {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.opcion-registro strong {
+  overflow-wrap: anywhere;
+}
+
+.opcion-registro small {
+  color: var(--gray-500);
+  font-size: 11px;
+}
+
+.mensaje-panel {
+  margin: 0;
+  padding: 24px 18px;
+  color: var(--gray-500);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.detalle-registro {
+  display: grid;
+  gap: 20px;
+  padding: 18px;
+}
+
+.encabezado-registro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.encabezado-registro>div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.encabezado-registro strong {
+  color: var(--gray-900);
+  overflow-wrap: anywhere;
+}
+
+.encabezado-registro p {
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 12px;
+}
+
+.datos-registro {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.datos-registro div {
+  display: grid;
+  gap: 4px;
+}
+
+.datos-registro dt {
+  color: var(--gray-500);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.datos-registro dd {
+  margin: 0;
+  color: var(--gray-800);
+  overflow-wrap: anywhere;
+}
+
+.acciones-registro {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding-top: 4px;
+  border-top: 1px solid var(--gray-200);
+}
+
+@media (max-width: 1100px) {
+  .navegador-registros {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .panel-detalle {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .navegador-registros {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-detalle {
+    grid-column: auto;
+  }
+
+  .panel-registros {
+    min-height: auto;
+  }
+
+  .encabezado-registro {
+    flex-direction: column;
+  }
 }
 
 .overlay {
