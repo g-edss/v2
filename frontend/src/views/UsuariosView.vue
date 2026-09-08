@@ -33,10 +33,10 @@ onMounted(cargarUsuarios);
 
 const ROLES = [
   { clave: 'admin_general', nombre: 'Administrador General' },
-  { clave: 'responsable',   nombre: 'Responsable' },
-  { clave: 'revisor',       nombre: 'Revisor' },
-  { clave: 'aprobador',     nombre: 'Aprobador' },
-  { clave: 'visor',         nombre: 'Visor' },
+  { clave: 'responsable', nombre: 'Responsable' },
+  { clave: 'revisor', nombre: 'Revisor' },
+  { clave: 'aprobador', nombre: 'Aprobador' },
+  { clave: 'visor', nombre: 'Visor' },
 ];
 
 function nombreRol(clave) {
@@ -67,7 +67,7 @@ const usuariosPagina = computed(() =>
 );
 
 /* ---------- Modal ---------- */
-const modalUsuario = ref(null); 
+const modalUsuario = ref(null);
 const usuarioABorrar = ref(null);
 const errores = ref({});
 const guardando = ref(false);
@@ -149,7 +149,7 @@ async function confirmarBorrado() {
 
   try {
     await api.del(`/usuarios/${usuarioABorrar.value.id}`);
-    
+
     usuarios.value = usuarios.value.map((u) =>
       u.id === usuarioABorrar.value.id ? { ...u, estado: 'Inactivo' } : u
     );
@@ -245,7 +245,7 @@ function iniciales(nombre) {
             <td>
               <div class="row-actions">
                 <button class="action-btn edit" title="Editar" @click="modalUsuario = u">
-                  <AppIcon name="check" :size="14" />
+                  <span aria-hidden="true">✎</span>
                 </button>
                 <button class="action-btn del" title="Desactivar" @click="usuarioABorrar = u">
                   <AppIcon name="plus" :size="14" style="transform:rotate(45deg)" />
@@ -316,8 +316,8 @@ function iniciales(nombre) {
             <label class="field">
               <span>{{ esNuevo ? 'Contraseña' : 'Nueva contraseña (opcional)' }}</span>
               <input v-model="form.contrasena" type="password"
-                     :placeholder="esNuevo ? '' : 'Dejar en blanco para no cambiarla'"
-                     :class="{ 'input-error': errores.contrasena }" />
+                :placeholder="esNuevo ? '' : 'Dejar en blanco para no cambiarla'"
+                :class="{ 'input-error': errores.contrasena }" />
               <small v-if="errores.contrasena" class="err">{{ errores.contrasena }}</small>
             </label>
 
@@ -342,21 +342,23 @@ function iniciales(nombre) {
 
     <!-- ===== MODAL ELIMINAR ===== -->
     <Teleport to="body">
-    <div v-if="usuarioABorrar" class="overlay" @click="usuarioABorrar = null">
-      <div class="modal modal-sm" @click.stop>
-        <div class="modal-head">
-          <h2>Desactivar usuario</h2>
-          <button class="modal-close" @click="usuarioABorrar = null">✕</button>
-        </div>
-        <div class="modal-body">
-          <p>¿Seguro que quieres desactivar a <strong>{{ usuarioABorrar.nombre }}</strong>? No podrá iniciar sesión. Un administrador puede reactivarlo editando su estado.</p>
-          <div class="modal-actions">
-            <button class="btn btn-ghost" @click="usuarioABorrar = null">Cancelar</button>
-            <button class="btn" style="background:var(--danger);color:#fff" @click="confirmarBorrado">Desactivar</button>
+      <div v-if="usuarioABorrar" class="overlay" @click="usuarioABorrar = null">
+        <div class="modal modal-sm" @click.stop>
+          <div class="modal-head">
+            <h2>Desactivar usuario</h2>
+            <button class="modal-close" @click="usuarioABorrar = null">✕</button>
+          </div>
+          <div class="modal-body">
+            <p>¿Seguro que quieres desactivar a <strong>{{ usuarioABorrar.nombre }}</strong>? No podrá iniciar sesión.
+              Un administrador puede reactivarlo editando su estado.</p>
+            <div class="modal-actions">
+              <button class="btn btn-ghost" @click="usuarioABorrar = null">Cancelar</button>
+              <button class="btn" style="background:var(--danger);color:#fff"
+                @click="confirmarBorrado">Desactivar</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </Teleport>
   </div>
 </template>
@@ -364,91 +366,232 @@ function iniciales(nombre) {
 <style scoped>
 /* Toolbar */
 .toolbar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; padding: 14px 16px; flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  flex-wrap: wrap;
 }
-.toolbar-right { display: flex; align-items: center; gap: 12px; }
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .search-wrap {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--gray-100); border: 1px solid transparent;
-  border-radius: 8px; padding: 7px 12px; color: var(--gray-500);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gray-100);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 12px;
+  color: var(--gray-500);
 }
-.search-wrap:focus-within { border-color: var(--brand-200); background: #fff; }
-.search-wrap input { border: none; background: transparent; outline: none; font: inherit; font-size: 13px; }
+
+.search-wrap:focus-within {
+  border-color: var(--brand-200);
+  background: #fff;
+}
+
+.search-wrap input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+}
+
 .rows-select {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 13px; color: var(--gray-500);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--gray-500);
 }
+
 .rows-select select {
-  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
-  font: inherit; font-size: 13px; background: #fff;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  background: #fff;
 }
 
 /* Avatar */
 .avatar-circle {
-  width: 32px; height: 32px; border-radius: 50%;
-  background: var(--brand-200); color: var(--brand-800);
-  display: grid; place-items: center;
-  font-size: 11px; font-weight: 700;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--brand-200);
+  color: var(--brand-800);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 /* Row actions */
-.row-actions { display: flex; gap: 6px; }
+.row-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .action-btn {
-  width: 28px; height: 28px; border-radius: 6px;
-  border: none; cursor: pointer; display: grid; place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
   transition: background .12s;
 }
-.action-btn.edit { background: var(--brand-100); color: var(--brand-700); }
-.action-btn.edit:hover { background: var(--brand-200); }
-.action-btn.del { background: var(--danger-bg); color: var(--danger); }
-.action-btn.del:hover { background: #f5c6c5; }
+
+.action-btn.edit {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+
+.action-btn.edit:hover {
+  background: var(--brand-200);
+}
+
+.action-btn.del {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.action-btn.del:hover {
+  background: #f5c6c5;
+}
 
 /* Empty */
-.empty-row { text-align: center; color: var(--gray-500); padding: 28px !important; }
+.empty-row {
+  text-align: center;
+  color: var(--gray-500);
+  padding: 28px !important;
+}
 
 /* Paginación */
 .pagination {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px; border-top: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-soft);
   font-size: 13px;
 }
 
 /* Modal */
 .overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.45);
-  display: flex; align-items: flex-start; justify-content: center;
-  padding: 48px 16px; z-index: 100; overflow-y: auto;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  z-index: 100;
+  overflow-y: auto;
 }
+
 .modal {
-  background: #fff; border-radius: 12px; width: 100%; max-width: 420px;
-  box-shadow: var(--shadow-md); overflow: hidden;
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
-.modal-sm { max-width: 360px; }
+
+.modal-sm {
+  max-width: 360px;
+}
+
 .modal-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 18px; background: var(--brand-800); color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--brand-800);
+  color: #fff;
 }
-.modal-head h2 { font-size: 15px; color: #fff; }
+
+.modal-head h2 {
+  font-size: 15px;
+  color: #fff;
+}
+
 .modal-close {
-  background: transparent; border: none; color: #fff;
-  font-size: 16px; cursor: pointer; line-height: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
 }
-.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
 
 /* Campos */
-.field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: var(--gray-700); }
-.field input, .field select {
-  padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px;
-  font: inherit; font-size: 14px; font-weight: 400; outline: none;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
 }
-.field input:focus, .field select:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-100); }
-.input-error { border-color: var(--danger) !important; }
-.err { color: var(--danger); font-weight: 400; font-size: 12px; }
+
+.field input,
+.field select {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  outline: none;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-100);
+}
+
+.input-error {
+  border-color: var(--danger) !important;
+}
+
+.err {
+  color: var(--danger);
+  font-weight: 400;
+  font-size: 12px;
+}
+
 .error-banner {
-  background: var(--danger-bg); border: 1px solid var(--danger);
-  color: var(--danger); border-radius: 6px; padding: 9px 12px; font-size: 13px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: 6px;
+  padding: 9px 12px;
+  font-size: 13px;
 }
 </style>

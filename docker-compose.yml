@@ -22,8 +22,14 @@ services:
       - ./database/migrations/002_agregar-autenticacion.sql:/docker-entrypoint-initdb.d/002_agregar-autenticacion.sql:ro
       - ./database/migrations/003_catalogo_auditores.sql:/docker-entrypoint-initdb.d/003_catalogo_auditores.sql:ro
       - ./database/migrations/004_catalogo_indicadores.sql:/docker-entrypoint-initdb.d/004_catalogo_indicadores.sql:ro
-      - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/010_catalogos.sql:ro
-      - ./database/seeds/002_unidades_medida.sql:/docker-entrypoint-initdb.d/011_unidades_medida.sql:ro
+      - ./database/migrations/005_mediciones_indicadores.sql:/docker-entrypoint-initdb.d/005_mediciones_indicadores.sql:ro
+      - ./database/migrations/006_archivos_documentos.sql:/docker-entrypoint-initdb.d/006_archivos_documentos.sql:ro
+      - ./database/migrations/007_tipos_documentos.sql:/docker-entrypoint-initdb.d/007_tipos_documentos.sql:ro
+      - ./database/migrations/008_flujo_documental.sql:/docker-entrypoint-initdb.d/008_flujo_documental.sql:ro
+      - ./database/migrations/009_correcciones_documentales.sql:/docker-entrypoint-initdb.d/009_correcciones_documentales.sql:ro
+      - ./database/migrations/010_almacen_registros.sql:/docker-entrypoint-initdb.d/010_almacen_registros.sql:ro
+      - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/011_catalogos.sql:ro
+      - ./database/seeds/002_unidades_medida.sql:/docker-entrypoint-initdb.d/012_unidades_medida.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -40,6 +46,11 @@ services:
     ports:
       - "8080:8080"
 
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: web360_gotenberg
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -48,14 +59,18 @@ services:
       BACKEND_PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-web360}:${POSTGRES_PASSWORD:-cambiar_esta_clave}@db:5432/${POSTGRES_DB:-web360_calidad}
       JWT_SECRET: ${JWT_SECRET}
+      GOTENBERG_URL: http://gotenberg:3000
     depends_on:
       db:
         condition: service_healthy
+      gotenberg:
+        condition: service_started
     ports:
       - "3000:3000"
     volumes:
       - ./backend:/app
       - backend_node_modules:/app/node_modules
+      - web360_archivos:/app/storage
 
   frontend:
     build:
@@ -77,3 +92,4 @@ volumes:
   web360_pgdata:
   backend_node_modules:
   frontend_node_modules:
+  web360_archivos:

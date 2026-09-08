@@ -96,6 +96,108 @@ const guardando = ref(false);
 const errorFormulario = ref('');
 const indicadorADesactivar = ref(null);
 
+/* ---------- Mediciones ---------- */
+const modalMedicionesAbierto = ref(false);
+const indicadorSeleccionado = ref(null);
+const medicionEditando = ref(null);
+const medicionAEliminar = ref(null);
+const mediciones = ref([]);
+const cargandoMediciones = ref(false);
+const guardandoMedicion = ref(false);
+const errorMediciones = ref('');
+
+const formularioMedicionVacio = () => ({
+  fecha_medicion: '',
+  resultado: '',
+  observaciones: '',
+});
+
+const formMedicion = ref(formularioMedicionVacio());
+
+const graficaMediciones = computed(() => {
+  if (
+    !indicadorSeleccionado.value ||
+    mediciones.value.length === 0
+  ) {
+    return null;
+  }
+
+  const ancho = 700;
+  const alto = 250;
+  const margenX = 45;
+  const margenY = 30;
+
+  const resultados = mediciones.value.map((medicion) =>
+    Number(medicion.resultado)
+  );
+
+  const metaMinima = Number(
+    indicadorSeleccionado.value.meta_minima
+  );
+
+  const metaMaxima = Number(
+    indicadorSeleccionado.value.meta_maxima
+  );
+
+  const valores = [
+    ...resultados,
+    metaMinima,
+    metaMaxima,
+  ].filter(Number.isFinite);
+
+  let minimo = Math.min(...valores);
+  let maximo = Math.max(...valores);
+
+  if (minimo === maximo) {
+    minimo -= 1;
+    maximo += 1;
+  }
+
+  const espacio = (maximo - minimo) * 0.1;
+  minimo -= espacio;
+  maximo += espacio;
+
+  const obtenerX = (indice) => {
+    if (mediciones.value.length === 1) {
+      return ancho / 2;
+    }
+
+    return (
+      margenX +
+      (indice * (ancho - margenX * 2)) /
+      (mediciones.value.length - 1)
+    );
+  };
+
+  const obtenerY = (valor) =>
+    margenY +
+    ((maximo - valor) * (alto - margenY * 2)) /
+    (maximo - minimo);
+
+  const puntos = mediciones.value.map((medicion, indice) => ({
+    id: medicion.id,
+    x: obtenerX(indice),
+    y: obtenerY(Number(medicion.resultado)),
+    resultado: Number(medicion.resultado),
+    fecha: formatearFecha(medicion.fecha_medicion),
+    cumple: resultadoCumpleMeta(
+      indicadorSeleccionado.value,
+      medicion.resultado
+    ),
+  }));
+
+  return {
+    ancho,
+    alto,
+    puntos,
+    linea: puntos
+      .map((punto) => `${punto.x},${punto.y}`)
+      .join(' '),
+    metaMinimaY: obtenerY(metaMinima),
+    metaMaximaY: obtenerY(metaMaxima),
+  };
+});
+
 const formularioVacio = () => ({
   id: null,
   codigo: '',
@@ -190,6 +292,159 @@ function cerrarModal() {
   errorFormulario.value = '';
 }
 
+function puedeCapturarIndicador(indicador) {
+  if (esAdmin.value) {
+    return true;
+  }
+
+  return (indicador.usuarios || []).some(
+    (asignacion) =>
+      asignacion.usuario_id === auth.usuario?.id &&
+      asignacion.puede_capturar
+  );
+}
+
+async function abrirMediciones(indicador) {
+  indicadorSeleccionado.value = indicador;
+  mediciones.value = [];
+  medicionEditando.value = null;
+  formMedicion.value = formularioMedicionVacio();
+  errorMediciones.value = '';
+  modalMedicionesAbierto.value = true;
+  cargandoMediciones.value = true;
+
+  try {
+    mediciones.value = await api.get(
+      `/indicadores/${indicador.id}/mediciones`
+    );
+  } catch {
+    errorMediciones.value =
+      'No se pudo cargar el historial de mediciones.';
+  } finally {
+    cargandoMediciones.value = false;
+  }
+}
+
+function cerrarModalMediciones() {
+  modalMedicionesAbierto.value = false;
+  indicadorSeleccionado.value = null;
+  mediciones.value = [];
+  medicionEditando.value = null;
+  medicionAEliminar.value = null;
+  errorMediciones.value = '';
+}
+
+function editarMedicion(medicion) {
+  medicionEditando.value = medicion;
+
+  formMedicion.value = {
+    fecha_medicion: String(
+      medicion.fecha_medicion
+    ).slice(0, 10),
+    resultado: medicion.resultado,
+    observaciones: medicion.observaciones || '',
+  };
+
+  errorMediciones.value = '';
+}
+
+function cancelarEdicionMedicion() {
+  medicionEditando.value = null;
+  formMedicion.value = formularioMedicionVacio();
+  errorMediciones.value = '';
+}
+
+async function confirmarEliminarMedicion() {
+  if (
+    !medicionAEliminar.value ||
+    !indicadorSeleccionado.value
+  ) {
+    return;
+  }
+
+  errorMediciones.value = '';
+
+  try {
+    const rutaBase =
+      `/indicadores/${indicadorSeleccionado.value.id}/mediciones`;
+
+    await api.del(
+      `${rutaBase}/${medicionAEliminar.value.id}`
+    );
+
+    mediciones.value = await api.get(rutaBase);
+
+    if (
+      medicionEditando.value?.id ===
+      medicionAEliminar.value.id
+    ) {
+      cancelarEdicionMedicion();
+    }
+  } catch (err) {
+    errorMediciones.value =
+      err.message ||
+      'No se pudo eliminar la medición.';
+  } finally {
+    medicionAEliminar.value = null;
+  }
+}
+
+async function guardarMedicion() {
+  if (
+    !indicadorSeleccionado.value ||
+    !formMedicion.value.fecha_medicion ||
+    formMedicion.value.resultado === ''
+  ) {
+    errorMediciones.value =
+      'La fecha y el resultado son obligatorios.';
+    return;
+  }
+
+  const resultado = Number(formMedicion.value.resultado);
+
+  if (!Number.isFinite(resultado)) {
+    errorMediciones.value =
+      'El resultado debe ser un número válido.';
+    return;
+  }
+
+  guardandoMedicion.value = true;
+  errorMediciones.value = '';
+
+  try {
+    const datos = {
+      fecha_medicion:
+        formMedicion.value.fecha_medicion,
+      resultado,
+      observaciones:
+        formMedicion.value.observaciones.trim(),
+    };
+
+    const rutaBase =
+      `/indicadores/${indicadorSeleccionado.value.id}/mediciones`;
+
+    if (medicionEditando.value) {
+      await api.put(
+        `${rutaBase}/${medicionEditando.value.id}`,
+        datos
+      );
+    } else {
+      await api.post(rutaBase, datos);
+    }
+
+    mediciones.value = await api.get(rutaBase);
+
+    medicionEditando.value = null;
+    formMedicion.value = formularioMedicionVacio();
+  } catch (err) {
+    errorMediciones.value =
+      err.message ||
+      'No se pudo guardar la medición.';
+  } finally {
+    guardandoMedicion.value = false;
+  }
+}
+
 async function guardar() {
 
   if (
@@ -236,9 +491,10 @@ async function guardar() {
 
     await cargarDatos();
     cerrarModal();
-  } catch {
+  } catch (err) {
     errorFormulario.value =
-      'No se pudo guardar. Revisa los datos o el código utilizado.';
+      err.message ||
+      'No se pudo guardar el indicador.';
   } finally {
     guardando.value = false;
   }
@@ -278,6 +534,17 @@ function formatearNumero(valor) {
   }).format(Number(valor));
 }
 
+function formatearFecha(valor) {
+  if (!valor) {
+    return '—';
+  }
+
+  const fechaISO = String(valor).slice(0, 10);
+  const [anio, mes, dia] = fechaISO.split('-');
+
+  return `${dia}/${mes}/${anio}`;
+}
+
 function formatearMeta(indicador) {
   const minimo = formatearNumero(indicador.meta_minima);
   const maximo = formatearNumero(indicador.meta_maxima);
@@ -286,6 +553,22 @@ function formatearMeta(indicador) {
     : '';
 
   return `${minimo} - ${maximo}${simbolo}`;
+}
+
+function resultadoCumpleMeta(indicador, resultado) {
+  const valor = Number(resultado);
+  const minimo = Number(indicador.meta_minima);
+  const maximo = Number(indicador.meta_maxima);
+
+  if (indicador.sentido === 'mayor_mejor') {
+    return valor >= minimo;
+  }
+
+  if (indicador.sentido === 'menor_mejor') {
+    return valor <= maximo;
+  }
+
+  return valor >= minimo && valor <= maximo;
 }
 
 /* ---------- Exportar CSV ---------- */
@@ -309,6 +592,7 @@ function exportarCSV() {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
 </script>
 
 <template>
@@ -377,18 +661,22 @@ function exportarCSV() {
               </span>
             </td>
             <td>
-              <div v-if="esAdmin" class="row-actions">
-                <button class="action-btn edit" title="Editar" @click="editar(ind)">
+              <div class="row-actions">
+                <button class="action-btn measurements" title="Ver mediciones" @click="abrirMediciones(ind)">
+                  <span aria-hidden="true">▥</span>
+                </button>
+
+                <button v-if="esAdmin" class="action-btn edit" title="Editar" @click="editar(ind)">
                   <span aria-hidden="true">✎</span>
                 </button>
-                <button class="action-btn del" :title="ind.activo ? 'Desactivar indicador' : 'Indicador inactivo'"
-                  :disabled="!ind.activo" @click="indicadorADesactivar = ind">
+
+                <button v-if="esAdmin" class="action-btn del" :title="ind.activo
+                  ? 'Desactivar indicador'
+                  : 'Indicador inactivo'
+                  " :disabled="!ind.activo" @click="indicadorADesactivar = ind">
                   <span aria-hidden="true">×</span>
                 </button>
               </div>
-              <span v-else class="muted">
-                Solo consulta
-              </span>
             </td>
           </tr>
           <tr v-if="indicadoresPagina.length === 0">
@@ -550,6 +838,287 @@ function exportarCSV() {
       </div>
     </Teleport>
 
+    <!-- ===== MODAL MEDICIONES ===== -->
+    <Teleport to="body">
+      <div v-if="modalMedicionesAbierto" class="overlay" @click="cerrarModalMediciones">
+        <div class="modal modal-mediciones" @click.stop>
+          <div class="modal-head">
+            <div>
+              <h2>Mediciones del indicador</h2>
+              <p v-if="indicadorSeleccionado" class="muted">
+                {{ indicadorSeleccionado.codigo }} ·
+                {{ indicadorSeleccionado.nombre }}
+              </p>
+            </div>
+
+            <button class="modal-close" @click="cerrarModalMediciones">
+              ✕
+            </button>
+          </div>
+
+          <div class="modal-body">
+            <section v-if="
+              indicadorSeleccionado &&
+              indicadorSeleccionado.activo &&
+              puedeCapturarIndicador(indicadorSeleccionado)
+            " class="captura-medicion">
+              <h3>
+                {{
+                  medicionEditando
+                    ? 'Editar resultado'
+                    : 'Registrar resultado'
+                }}
+              </h3>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Fecha de medición *</span>
+                  <input v-model="formMedicion.fecha_medicion" type="date" />
+                </label>
+
+                <label class="field">
+                  <span>Resultado *</span>
+                  <input v-model="formMedicion.resultado" type="number" step="any" placeholder="Ej. 85.5" />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Observaciones</span>
+                <textarea v-model="formMedicion.observaciones" rows="3"
+                  placeholder="Explica brevemente el resultado..."></textarea>
+              </label>
+
+              <div class="modal-actions">
+                <button v-if="medicionEditando" class="btn btn-ghost" :disabled="guardandoMedicion"
+                  @click="cancelarEdicionMedicion">
+                  Cancelar edición
+                </button>
+
+                <button class="btn btn-primary" :disabled="guardandoMedicion" @click="guardarMedicion">
+                  {{
+                    guardandoMedicion
+                      ? 'Guardando...'
+                      : medicionEditando
+                        ? 'Guardar cambios'
+                        : 'Registrar medición'
+                  }}
+                </button>
+              </div>
+            </section>
+
+            <p v-else class="muted">
+              Puedes consultar el historial, pero no capturar mediciones.
+            </p>
+
+            <p v-if="errorMediciones" class="form-error">
+              {{ errorMediciones }}
+            </p>
+
+            <section v-if="graficaMediciones" class="grafica-section">
+              <h3>Evolución de resultados</h3>
+
+              <div class="grafica-contenedor">
+                <svg :viewBox="`0 0 ${graficaMediciones.ancho} ${graficaMediciones.alto}`
+                  " role="img" aria-label="Gráfica de resultados del indicador">
+                  <rect x="45" :y="Math.min(
+                    graficaMediciones.metaMinimaY,
+                    graficaMediciones.metaMaximaY
+                  )
+                    " width="610" :height="Math.abs(
+                      graficaMediciones.metaMaximaY -
+                      graficaMediciones.metaMinimaY
+                    )
+                      " class="zona-meta" />
+
+                  <line x1="45" x2="655" :y1="graficaMediciones.metaMinimaY" :y2="graficaMediciones.metaMinimaY"
+                    class="linea-meta" />
+
+                  <line x1="45" x2="655" :y1="graficaMediciones.metaMaximaY" :y2="graficaMediciones.metaMaximaY"
+                    class="linea-meta" />
+
+                  <text x="50" :y="graficaMediciones.metaMaximaY - 7" class="etiqueta-meta">
+                    Meta máxima:
+                    {{
+                      formatearNumero(
+                        indicadorSeleccionado.meta_maxima
+                      )
+                    }}
+                    {{ indicadorSeleccionado.unidad_simbolo || '' }}
+                  </text>
+
+                  <text x="50" :y="graficaMediciones.metaMinimaY - 7" class="etiqueta-meta">
+                    Meta mínima:
+                    {{
+                      formatearNumero(
+                        indicadorSeleccionado.meta_minima
+                      )
+                    }}
+                    {{ indicadorSeleccionado.unidad_simbolo || '' }}
+                  </text>
+
+                  <polyline :points="graficaMediciones.linea" class="linea-resultados" />
+
+                  <g v-for="punto in graficaMediciones.puntos" :key="punto.id">
+                    <circle :cx="punto.x" :cy="punto.y" r="5" :class="[
+                      'punto-resultado',
+                      punto.cumple ? 'cumple' : 'no-cumple',
+                    ]">
+                      <title>
+                        {{ punto.fecha }}: {{ punto.resultado }}
+                      </title>
+                    </circle>
+
+                    <text :x="punto.x" :y="punto.y - 10" text-anchor="middle" class="etiqueta-resultado">
+                      {{ formatearNumero(punto.resultado) }}
+                    </text>
+
+                    <text :x="punto.x" :y="graficaMediciones.alto - 5" text-anchor="middle" class="etiqueta-fecha">
+                      {{ punto.fecha }}
+                    </text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="leyenda-grafica">
+                <span>
+                  <i class="leyenda-resultados"></i>
+                  Resultado
+                </span>
+
+                <span>
+                  <i class="leyenda-meta"></i>
+                  Rango de meta
+                </span>
+              </div>
+            </section>
+
+            <section class="historial-mediciones">
+              <h3>Historial</h3>
+
+              <p v-if="cargandoMediciones" class="muted">
+                Cargando mediciones...
+              </p>
+
+              <p v-else-if="mediciones.length === 0" class="muted">
+                Todavía no hay mediciones registradas.
+              </p>
+
+              <div v-else class="tabla-mediciones">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Resultado</th>
+                      <th>Capturó</th>
+                      <th>Observaciones</th>
+                      <th v-if="
+                        indicadorSeleccionado?.activo &&
+                        puedeCapturarIndicador(indicadorSeleccionado)
+                      ">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <tr v-for="medicion in mediciones" :key="medicion.id">
+                      <td>{{ formatearFecha(medicion.fecha_medicion) }}</td>
+                      <td>
+                        <strong>
+                          {{ formatearNumero(medicion.resultado) }}
+                          {{
+                            indicadorSeleccionado?.unidad_simbolo || ''
+                          }}
+                        </strong>
+                      </td>
+                      <td>{{ medicion.capturado_por_nombre }}</td>
+                      <td>
+                        {{ medicion.observaciones || '—' }}
+                      </td>
+                      <td v-if="
+                        indicadorSeleccionado?.activo &&
+                        puedeCapturarIndicador(indicadorSeleccionado)
+                      ">
+                        <div class="row-actions">
+                          <button class="action-btn edit" title="Editar medición" @click="editarMedicion(medicion)">
+                            <span aria-hidden="true">✎</span>
+                          </button>
+
+                          <button v-if="esAdmin" class="action-btn del" title="Eliminar medición"
+                            @click="medicionAEliminar = medicion">
+                            <span aria-hidden="true">×</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <div class="modal-actions">
+              <button class="btn btn-ghost" @click="cerrarModalMediciones">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ===== CONFIRMAR ELIMINACIÓN DE MEDICIÓN ===== -->
+    <Teleport to="body">
+      <div v-if="medicionAEliminar" class="overlay" @click="medicionAEliminar = null">
+        <div class="modal modal-sm" @click.stop>
+          <div class="modal-head">
+            <h2>Eliminar medición</h2>
+
+            <button class="modal-close" @click="medicionAEliminar = null">
+              ✕
+            </button>
+          </div>
+
+          <div class="modal-body">
+            <p>
+              ¿Seguro que quieres eliminar la medición del
+              <strong>
+                {{
+                  formatearFecha(
+                    medicionAEliminar.fecha_medicion
+                  )
+                }}
+              </strong>
+              con resultado
+              <strong>
+                {{
+                  formatearNumero(
+                    medicionAEliminar.resultado
+                  )
+                }}
+                {{
+                  indicadorSeleccionado?.unidad_simbolo || ''
+                }}
+              </strong>?
+            </p>
+
+            <p class="muted">
+              Esta acción elimina permanentemente el registro.
+            </p>
+
+            <div class="modal-actions">
+              <button class="btn btn-ghost" @click="medicionAEliminar = null">
+                Cancelar
+              </button>
+
+              <button class="btn" style="background:var(--danger);color:#fff" @click="confirmarEliminarMedicion">
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- ===== MODAL ELIMINAR ===== -->
     <Teleport to="body">
       <div v-if="indicadorADesactivar" class="overlay" @click="indicadorADesactivar = null">
@@ -655,6 +1224,15 @@ code {
   cursor: pointer;
   display: grid;
   place-items: center;
+}
+
+.action-btn.measurements {
+  background: #e8f0fe;
+  color: #2457a7;
+}
+
+.action-btn.measurements:hover {
+  background: #d4e3fc;
 }
 
 .action-btn.edit {
@@ -909,5 +1487,164 @@ code {
   background: var(--gray-100);
   color: var(--gray-500);
   font-size: 13px;
+}
+
+.modal-mediciones {
+  max-width: 820px;
+}
+
+.modal-mediciones .modal-body {
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.modal-mediciones .modal-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.captura-medicion {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.captura-medicion h3,
+.historial-mediciones h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--gray-800);
+}
+
+.historial-mediciones {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.tabla-mediciones {
+  overflow-x: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.tabla-mediciones .table {
+  min-width: 650px;
+}
+
+.tabla-mediciones th,
+.tabla-mediciones td {
+  padding: 10px 12px;
+}
+
+.grafica-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.grafica-section h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--gray-800);
+}
+
+.grafica-contenedor {
+  overflow-x: auto;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.grafica-contenedor svg {
+  display: block;
+  width: 100%;
+  min-width: 650px;
+  height: auto;
+}
+
+.zona-meta {
+  fill: #dcfce7;
+  opacity: 0.7;
+}
+
+.linea-meta {
+  stroke: #16a34a;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+}
+
+.linea-resultados {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.punto-resultado {
+  fill: #2563eb;
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.etiqueta-resultado {
+  fill: #1e3a5f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.etiqueta-fecha {
+  fill: #64748b;
+  font-size: 10px;
+}
+
+.leyenda-grafica {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  color: var(--gray-600);
+  font-size: 12px;
+}
+
+.leyenda-grafica span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.leyenda-grafica i {
+  display: inline-block;
+  width: 18px;
+  height: 4px;
+  border-radius: 4px;
+}
+
+.leyenda-resultados {
+  background: #2563eb;
+}
+
+.leyenda-meta {
+  background: #22c55e;
+}
+
+.etiqueta-meta {
+  fill: #15803d;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.punto-resultado.cumple {
+  fill: #16a34a;
+}
+
+.punto-resultado.no-cumple {
+  fill: #dc2626;
 }
 </style>
