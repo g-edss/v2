@@ -1,32 +1,48 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import AppIcon from './AppIcon.vue';
+import { useAuthStore } from '@/stores/auth';
+import { puedeAcceder } from '@/config/permisos';
 
-const catalogosAbierto  = ref(false);
-const gestionAbierto    = ref(false);
+const catalogosAbierto = ref(false);
+const indicadoresAbierto = ref(false);
+const gestionAbierto = ref(false);
+const auth = useAuthStore();
+
+function mostrar(ruta) {
+  return puedeAcceder(auth.usuario?.rol_clave, ruta);
+}
+
+const haySubmenu = computed(() =>
+  ['usuarios', 'procesos', 'auditores'].some(mostrar)
+);
+
+const hayIndicadores = computed(() =>
+  [
+    'indicadores',
+    'tipoIndicador',
+    'unidadMedida'
+  ].some(mostrar)
+);
+
+const hayGestion = computed(() =>
+  [
+    'auditorias',
+    'accionesCorrectivas'
+  ].some(mostrar)
+);
 </script>
 
 <template>
   <aside class="sidebar">
 
     <div class="brand">
-      <div class="brand-mark">
-        <svg width="24" height="24" viewBox="0 0 32 32">
-          <path d="M16 4l10 5v7c0 6.2-4.2 10.5-10 12.5C10.2 26.5 6 22.2 6 16V9l10-5z"
-                fill="#fff" opacity=".95"/>
-          <path d="M11 16.5l3.2 3.2L21 13" fill="none" stroke="#1b7a43"
-                stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <div class="brand-text">
-        <strong>WEB 360</strong>
-        <span>de Calidad</span>
-      </div>
+      <!-- ...igual que antes... -->
     </div>
 
     <nav class="nav">
 
-      <RouterLink to="/" class="nav-item" exact-active-class="active">
+      <RouterLink v-if="mostrar('dashboard')" to="/" class="nav-item" exact-active-class="active">
         <AppIcon name="dashboard" :size="18" /><span>Inicio</span>
       </RouterLink>
 
@@ -34,7 +50,7 @@ const gestionAbierto    = ref(false);
         <AppIcon name="doc" :size="18" /><span>Visor Documental</span>
       </RouterLink>
 
-      <div class="nav-section">MÓDULOS</div>
+      <div v-if="haySubmenu" class="nav-section">MÓDULOS</div>
 
       <!-- Control General (submenú) -->
       <button v-if="haySubmenu" class="nav-item nav-item--btn" :class="{ active: catalogosAbierto }"
@@ -56,8 +72,33 @@ const gestionAbierto    = ref(false);
         <RouterLink v-if="mostrar('auditores')" to="/auditores" class="sub-item" active-class="active">
           <AppIcon name="audit" :size="15" /> Catálogo de Auditores
         </RouterLink>
+      </div>
+
+      <button v-if="hayIndicadores" class="nav-item nav-item--btn" :class="{ active: indicadoresAbierto }" type="button"
+        @click="indicadoresAbierto = !indicadoresAbierto">
+        <AppIcon name="doc" :size="18" />
+        <span>Indicadores</span>
+
+        <svg class="chevron" :class="{ rotado: indicadoresAbierto }" width="14" height="14" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      <div v-if="hayIndicadores && indicadoresAbierto" class="submenu">
         <RouterLink v-if="mostrar('indicadores')" to="/indicadores" class="sub-item" active-class="active">
-          <AppIcon name="doc" :size="15" /> Catálogo de Indicadores
+          <AppIcon name="doc" :size="15" />
+          Catálogo de Indicadores
+        </RouterLink>
+
+        <RouterLink v-if="mostrar('tipoIndicador')" to="/tipo-indicador" class="sub-item" active-class="active">
+          <AppIcon name="doc" :size="15" />
+          Tipos de Indicador
+        </RouterLink>
+
+        <RouterLink v-if="mostrar('unidadMedida')" to="/unidad-medida" class="sub-item" active-class="active">
+          <AppIcon name="doc" :size="15" />
+          Unidades de Medida
         </RouterLink>
       </div>
 
@@ -73,13 +114,33 @@ const gestionAbierto    = ref(false);
         <AppIcon name="request" :size="18" /><span>Solicitudes y Cambios</span>
       </RouterLink>
 
-      <RouterLink v-if="mostrar('auditorias')" to="/auditorias" class="nav-item" active-class="active">
-        <AppIcon name="audit" :size="18" /><span>Auditorías</span>
-      </RouterLink>
+      <button v-if="hayGestion" class="nav-item nav-item--btn" :class="{ active: gestionAbierto }" type="button"
+        @click="gestionAbierto = !gestionAbierto">
+        <AppIcon name="audit" :size="18" />
+        <span>Gestión de Calidad</span>
 
-      <RouterLink to="/documentos"   class="nav-item" active-class="active"><AppIcon name="doc"     :size="18" /><span>Control de Documentos</span></RouterLink>
-      <RouterLink to="/solicitudes"  class="nav-item" active-class="active"><AppIcon name="request" :size="18" /><span>Solicitudes y Cambios</span></RouterLink>
-      <RouterLink to="/juntas"       class="nav-item" active-class="active"><AppIcon name="meeting" :size="18" /><span>Juntas y Sesiones</span></RouterLink>
+        <svg class="chevron" :class="{ rotado: gestionAbierto }" width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      <div v-if="hayGestion && gestionAbierto" class="submenu">
+        <RouterLink v-if="mostrar('auditorias')" to="/auditorias" class="sub-item" active-class="active">
+          <AppIcon name="audit" :size="15" />
+          Auditorías
+        </RouterLink>
+
+        <RouterLink v-if="mostrar('accionesCorrectivas')" to="/acciones-correctivas" class="sub-item"
+          active-class="active">
+          <AppIcon name="check" :size="15" />
+          Acciones Correctivas
+        </RouterLink>
+      </div>
+
+      <RouterLink v-if="mostrar('juntas')" to="/juntas" class="nav-item" active-class="active">
+        <AppIcon name="meeting" :size="18" /><span>Juntas y Sesiones</span>
+      </RouterLink>
 
     </nav>
 

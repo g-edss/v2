@@ -11,7 +11,10 @@ const ROLE_MODULES = [
   'juntas',
   'auditores',
   'indicadores',
-]
+  'tipoIndicador',
+  'unidadMedida',
+  'accionesCorrectivas',
+];
 
 export const RUTAS_POR_ROL = {
   visor: ['dashboard', 'visorDocumental', 'almacenRegistros'],
