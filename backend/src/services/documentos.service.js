@@ -340,7 +340,7 @@ async function eliminarArchivoSiExiste(rutaRelativa) {
     }
 }
 
-async function limpiarArchivosGuardados(datosArchivo) {
+export async function limpiarArchivosGuardados(datosArchivo) {
     const rutas = new Set([
         datosArchivo.archivoOriginalUrl,
         datosArchivo.archivoPdfUrl,

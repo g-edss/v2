@@ -1,15 +1,72 @@
-import * as solicitudesService from
-    '../services/solicitudes.service.js';
+import * as solicitudesService from "../services/solicitudes.service.js";
 
 export async function listar(req, res, next) {
     try {
-        const solicitudes =
-            await solicitudesService.listarSolicitudes({
+        const solicitudes = await solicitudesService.listarSolicitudes({
+            usuarioId: Number(req.auth.sub),
+            rol: req.auth.rol,
+        });
+
+        res.json(solicitudes);
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function crear(req, res, next) {
+    try {
+        const documentoId = Number(req.body.documentoId);
+
+        const solicitud = await solicitudesService.crearSolicitudDocumento({
+            tipoClave: req.body.tipoClave,
+            documentoId,
+            solicitanteId: Number(req.auth.sub),
+            descripcion: req.body.descripcion,
+            archivos: req.files || [],
+        });
+
+        res.status(201).json({
+            mensaje: "La solicitud fue creada correctamente.",
+            solicitud,
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function descargarArchivo(req, res, next) {
+    try {
+        const solicitudId = Number(req.params.id);
+        const archivoId = Number(req.params.archivoId);
+
+        if (
+            !Number.isInteger(solicitudId) ||
+            solicitudId <= 0 ||
+            !Number.isInteger(archivoId) ||
+            archivoId <= 0
+        ) {
+            return res.status(400).json({
+                error: "La solicitud o el archivo no son válidos.",
+            });
+        }
+
+        const archivo =
+            await solicitudesService.obtenerArchivoSolicitud({
+                solicitudId,
+                archivoId,
                 usuarioId: Number(req.auth.sub),
                 rol: req.auth.rol,
             });
 
-        res.json(solicitudes);
+        res.download(
+            archivo.rutaAbsoluta,
+            archivo.nombreDescarga,
+            (error) => {
+                if (error && !res.headersSent) {
+                    next(error);
+                }
+            },
+        );
     } catch (error) {
         next(error);
     }
@@ -18,35 +75,28 @@ export async function listar(req, res, next) {
 export async function avanzar(req, res, next) {
     try {
         const solicitudId = Number(req.params.id);
-        const comentario =
-            String(req.body.comentario || '').trim();
+        const comentario = String(req.body.comentario || "").trim();
 
-        if (
-            !Number.isInteger(solicitudId) ||
-            solicitudId <= 0
-        ) {
+        if (!Number.isInteger(solicitudId) || solicitudId <= 0) {
             return res.status(400).json({
-                error: 'La solicitud no es válida.',
+                error: "La solicitud no es válida.",
             });
         }
 
         if (comentario.length > 2000) {
             return res.status(400).json({
-                error:
-                    'El comentario debe tener máximo 2000 caracteres.',
+                error: "El comentario debe tener máximo 2000 caracteres.",
             });
         }
 
-        const solicitud =
-            await solicitudesService.avanzarSolicitud({
-                solicitudId,
-                usuarioId: Number(req.auth.sub),
-                comentario,
-            });
+        const solicitud = await solicitudesService.avanzarSolicitud({
+            solicitudId,
+            usuarioId: Number(req.auth.sub),
+            comentario,
+        });
 
         res.json({
-            mensaje:
-                'La solicitud avanzó a la siguiente etapa.',
+            mensaje: "La solicitud avanzó a la siguiente etapa.",
             solicitud,
         });
     } catch (error) {
@@ -57,45 +107,39 @@ export async function avanzar(req, res, next) {
 export async function aprobar(req, res, next) {
     try {
         const solicitudId = Number(req.params.id);
-        const comentario =
-            String(req.body.comentario || '').trim();
+        const comentario = String(req.body.comentario || "").trim();
 
-        const codigo =
-            String(req.body.codigo || '').trim().toUpperCase();
+        const codigo = String(req.body.codigo || "")
+            .trim()
+            .toUpperCase();
 
         if (codigo.length > 60) {
             return res.status(400).json({
-                error:
-                    'El código debe tener máximo 60 caracteres.',
+                error: "El código debe tener máximo 60 caracteres.",
             });
         }
 
-        if (
-            !Number.isInteger(solicitudId) ||
-            solicitudId <= 0
-        ) {
+        if (!Number.isInteger(solicitudId) || solicitudId <= 0) {
             return res.status(400).json({
-                error: 'La solicitud no es válida.',
+                error: "La solicitud no es válida.",
             });
         }
 
         if (comentario.length > 2000) {
             return res.status(400).json({
-                error:
-                    'El comentario debe tener máximo 2000 caracteres.',
+                error: "El comentario debe tener máximo 2000 caracteres.",
             });
         }
 
-        const solicitud =
-            await solicitudesService.aprobarSolicitud({
-                solicitudId,
-                usuarioId: Number(req.auth.sub),
-                comentario,
-                codigo,
-            });
+        const solicitud = await solicitudesService.aprobarSolicitud({
+            solicitudId,
+            usuarioId: Number(req.auth.sub),
+            comentario,
+            codigo,
+        });
 
         res.json({
-            mensaje: 'La solicitud fue aprobada correctamente.',
+            mensaje: "La solicitud fue aprobada correctamente.",
             solicitud,
         });
     } catch (error) {
@@ -106,42 +150,34 @@ export async function aprobar(req, res, next) {
 export async function devolver(req, res, next) {
     try {
         const solicitudId = Number(req.params.id);
-        const comentario =
-            String(req.body.comentario || '').trim();
+        const comentario = String(req.body.comentario || "").trim();
 
-        if (
-            !Number.isInteger(solicitudId) ||
-            solicitudId <= 0
-        ) {
+        if (!Number.isInteger(solicitudId) || solicitudId <= 0) {
             return res.status(400).json({
-                error: 'La solicitud no es válida.',
+                error: "La solicitud no es válida.",
             });
         }
 
         if (!comentario) {
             return res.status(400).json({
-                error:
-                    'Debes explicar qué correcciones se requieren.',
+                error: "Debes explicar qué correcciones se requieren.",
             });
         }
 
         if (comentario.length > 2000) {
             return res.status(400).json({
-                error:
-                    'El comentario debe tener máximo 2000 caracteres.',
+                error: "El comentario debe tener máximo 2000 caracteres.",
             });
         }
 
-        const solicitud =
-            await solicitudesService.solicitarCorrecciones({
-                solicitudId,
-                usuarioId: Number(req.auth.sub),
-                comentario,
-            });
+        const solicitud = await solicitudesService.solicitarCorrecciones({
+            solicitudId,
+            usuarioId: Number(req.auth.sub),
+            comentario,
+        });
 
         res.json({
-            mensaje:
-                'El documento fue devuelto para correcciones.',
+            mensaje: "El documento fue devuelto para correcciones.",
             solicitud,
         });
     } catch (error) {
@@ -152,42 +188,34 @@ export async function devolver(req, res, next) {
 export async function rechazar(req, res, next) {
     try {
         const solicitudId = Number(req.params.id);
-        const comentario =
-            String(req.body.comentario || '').trim();
+        const comentario = String(req.body.comentario || "").trim();
 
-        if (
-            !Number.isInteger(solicitudId) ||
-            solicitudId <= 0
-        ) {
+        if (!Number.isInteger(solicitudId) || solicitudId <= 0) {
             return res.status(400).json({
-                error: 'La solicitud no es válida.',
+                error: "La solicitud no es válida.",
             });
         }
 
         if (!comentario) {
             return res.status(400).json({
-                error:
-                    'Debes explicar el motivo del rechazo.',
+                error: "Debes explicar el motivo del rechazo.",
             });
         }
 
         if (comentario.length > 2000) {
             return res.status(400).json({
-                error:
-                    'El comentario debe tener máximo 2000 caracteres.',
+                error: "El comentario debe tener máximo 2000 caracteres.",
             });
         }
 
-        const solicitud =
-            await solicitudesService.rechazarSolicitud({
-                solicitudId,
-                usuarioId: Number(req.auth.sub),
-                comentario,
-            });
+        const solicitud = await solicitudesService.rechazarSolicitud({
+            solicitudId,
+            usuarioId: Number(req.auth.sub),
+            comentario,
+        });
 
         res.json({
-            mensaje:
-                'La solicitud y el documento fueron rechazados.',
+            mensaje: "La solicitud y el documento fueron rechazados.",
             solicitud,
         });
     } catch (error) {

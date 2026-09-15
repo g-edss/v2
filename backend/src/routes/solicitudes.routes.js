@@ -1,52 +1,52 @@
-import { Router } from 'express';
+import { Router } from "express";
 
-import * as controller from
-    '../controllers/solicitudes.controller.js';
+import * as controller from "../controllers/solicitudes.controller.js";
 
-import {
-    requireAuth,
-    requireRole,
-} from '../middlewares/auth.js';
+import { subirArchivosSolicitud } from "../middlewares/uploadDocumento.js";
+
+import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router = Router();
 
 router.get(
-    '/',
+    "/",
     requireAuth,
-    requireRole(
-        'admin_general',
-        'responsable',
-        'revisor',
-        'aprobador',
-    ),
     controller.listar,
 );
 
-router.post(
-    '/:id/aprobar',
+router.post("/", requireAuth, subirArchivosSolicitud, controller.crear);
+
+router.get(
+    "/:id/archivos/:archivoId",
     requireAuth,
-    requireRole('aprobador'),
+    controller.descargarArchivo,
+);
+
+router.post(
+    "/:id/aprobar",
+    requireAuth,
+    requireRole("aprobador"),
     controller.aprobar,
 );
 
 router.post(
-    '/:id/avanzar',
+    "/:id/avanzar",
     requireAuth,
-    requireRole('responsable', 'revisor'),
+    requireRole("responsable", "revisor"),
     controller.avanzar,
 );
 
 router.post(
-    '/:id/correcciones',
+    "/:id/correcciones",
     requireAuth,
-    requireRole('responsable', 'revisor', 'aprobador'),
+    requireRole("responsable", "revisor", "aprobador"),
     controller.devolver,
 );
 
 router.post(
-    '/:id/rechazar',
+    "/:id/rechazar",
     requireAuth,
-    requireRole('responsable', 'revisor', 'aprobador'),
+    requireRole("responsable", "revisor", "aprobador"),
     controller.rechazar,
 );
 

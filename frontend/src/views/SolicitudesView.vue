@@ -1,12 +1,114 @@
 <script setup>
-import { onMounted, ref } from 'vue';
-
+import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { api } from '@/api/client.js';
-import BaseCard from '@/components/BaseCard.vue';
+import { useAuthStore } from '@/stores/auth.js';
 import AppIcon from '@/components/AppIcon.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 
+const auth = useAuthStore();
+const router = useRouter();
 const solicitudes = ref([]);
+const vistaActual = ref('flujo');
+const etapaActiva = ref(null);
+const mostrarModalNueva = ref(false);
+const cargandoCatalogos = ref(false);
+const procesandoNueva = ref(false);
+const errorNueva = ref('');
+
+const documentosDisponibles = ref([]);
+const procesosDisponibles = ref([]);
+
+function formularioNuevaInicial() {
+  return {
+    tipoClave: 'alta',
+    documentoId: '',
+    nombreDocumento: '',
+    procesoId: '',
+    solicitante: '',
+    descripcion: '',
+    archivos: [],
+  };
+}
+
+const formNueva = ref(formularioNuevaInicial());
+
+const documentoSeleccionado = computed(() =>
+  documentosDisponibles.value.find(
+    documento =>
+      Number(documento.id) ===
+      Number(formNueva.value.documentoId),
+  ) || null,
+);
+
+function abrirSolicitudes() {
+  vistaActual.value = 'solicitudes';
+}
+
+function volverAlFlujo() {
+  vistaActual.value = 'flujo';
+}
+
+function activarEtapa(etapa) {
+  etapaActiva.value = etapa;
+}
+
+function desactivarEtapa() {
+  etapaActiva.value = null;
+}
+
+async function cargarCatalogosNueva() {
+  cargandoCatalogos.value = true;
+  errorNueva.value = '';
+
+  try {
+    const [
+      documentos,
+      procesos,
+    ] = await Promise.all([
+      api.get('/documentos'),
+      api.get('/procesos'),
+    ]);
+
+    documentosDisponibles.value =
+      documentos.filter(
+        documento =>
+          documento.estado === 'vigente',
+      );
+
+    procesosDisponibles.value =
+      procesos.filter(
+        proceso =>
+          proceso.estatus === 'activo',
+      );
+  } catch (err) {
+    errorNueva.value =
+      err.message ||
+      'No se pudieron cargar los catálogos.';
+  } finally {
+    cargandoCatalogos.value = false;
+  }
+}
+
+async function abrirNuevaSolicitud() {
+  formNueva.value = formularioNuevaInicial();
+  formNueva.value.solicitante =
+    auth.usuario?.nombre || '';
+  errorNueva.value = '';
+  mostrarModalNueva.value = true;
+
+  await cargarCatalogosNueva();
+}
+
+function cerrarNuevaSolicitud() {
+  if (procesandoNueva.value) {
+    return;
+  }
+
+  mostrarModalNueva.value = false;
+  errorNueva.value = '';
+}
+
 const cargando = ref(false);
 const error = ref('');
 const mensaje = ref('');
@@ -47,6 +149,89 @@ function formatearFecha(valor) {
     .split('-');
 
   return `${dia}/${mes}/${anio}`;
+}
+
+function claseEstado(estado) {
+  const valor = String(estado || '').toLowerCase();
+
+  if (valor.includes('aprobad')) {
+    return 'solcambio-badge--exito';
+  }
+
+  if (valor.includes('rechaz')) {
+    return 'solcambio-badge--rechazo';
+  }
+
+  if (
+    valor.includes('revisor') ||
+    valor.includes('aprobador') ||
+    valor.includes('responsable')
+  ) {
+    return 'solcambio-badge--proceso';
+  }
+
+  if (valor.includes('correccion')) {
+    return 'solcambio-badge--pendiente';
+  }
+
+  return 'solcambio-badge--neutro';
+}
+
+function etiquetaEstado(estado) {
+  const etiquetas = {
+    pendiente: 'Pendiente',
+    en_responsable: 'Con responsable',
+    en_revisor: 'Con revisor',
+    en_aprobador: 'Con aprobador',
+    correcciones: 'Requiere correcciones',
+    aprobada: 'Aprobada',
+    rechazada: 'Rechazada'
+  };
+
+  return etiquetas[estado] || estado;
+}
+
+function textoAsignacion(solicitud) {
+  const participantes = [
+    solicitud.responsable
+      ? `Responsable: ${solicitud.responsable}`
+      : null,
+    solicitud.revisor
+      ? `Revisor: ${solicitud.revisor}`
+      : 'Sin revisor',
+    solicitud.aprobador
+      ? `Aprobador: ${solicitud.aprobador}`
+      : null,
+  ].filter(Boolean);
+
+  return participantes.join(' · ');
+}
+
+async function descargarArchivoSolicitud(solicitud, archivo) {
+  error.value = '';
+  accionArchivo.value = `solicitud-${archivo.id}`;
+
+  try {
+    const blob = await api.getBlob(
+      `/solicitudes/${solicitud.id}/archivos/${archivo.id}`,
+    );
+
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+
+    enlace.href = url;
+    enlace.download = archivo.nombre_archivo || 'archivo';
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    error.value =
+      err.message || 'No se pudo descargar el archivo adjunto.';
+  } finally {
+    accionArchivo.value = '';
+  }
 }
 
 async function verPdf(solicitud) {
@@ -175,7 +360,11 @@ async function aprobarSeleccionada() {
     .trim()
     .toUpperCase();
 
-  if (!esRegistro && !codigo) {
+  const requiereCodigo =
+    !esRegistro &&
+    solicitudSeleccionada.value.tipo_clave === 'alta';
+
+  if (requiereCodigo && !codigo) {
     error.value =
       'Debes asignar el código institucional.';
     return;
@@ -192,7 +381,7 @@ async function aprobarSeleccionada() {
       {
         comentario:
           comentarioDecision.value || null,
-        codigo: esRegistro ? '' : codigo,
+        codigo: requiereCodigo ? codigo : '',
       },
     );
 
@@ -305,6 +494,121 @@ async function rechazarSeleccionada() {
   }
 }
 
+function seleccionarArchivos(evento) {
+  formNueva.value.archivos =
+    Array.from(evento.target.files || []);
+}
+
+async function guardarNuevaSolicitud() {
+  if (procesandoNueva.value) {
+    return;
+  }
+
+  if (formNueva.value.tipoClave === 'alta') {
+    const nombreDocumento =
+      formNueva.value.nombreDocumento.trim();
+
+    const procesoId =
+      Number(formNueva.value.procesoId);
+
+    const descripcion =
+      formNueva.value.descripcion.trim();
+
+    if (!nombreDocumento) {
+      errorNueva.value =
+        'Debes escribir el nombre del documento.';
+      return;
+    }
+
+    if (!Number.isInteger(procesoId)) {
+      errorNueva.value =
+        'Debes seleccionar un proceso.';
+      return;
+    }
+
+    if (!descripcion) {
+      errorNueva.value =
+        'Debes describir la solicitud.';
+      return;
+    }
+
+    mostrarModalNueva.value = false;
+
+    await router.push({
+      name: 'documentos',
+      query: {
+        nuevo: '1',
+        nombre: nombreDocumento,
+        procesoId,
+        descripcion,
+      },
+    });
+
+    return;
+  }
+
+  const documentoId = Number(formNueva.value.documentoId);
+
+  const descripcion = formNueva.value.descripcion.trim();
+
+  if (!Number.isInteger(documentoId)) {
+    errorNueva.value =
+      'Debes seleccionar un documento.';
+    return;
+  }
+
+  if (!descripcion) {
+    errorNueva.value =
+      'Debes explicar el motivo de la solicitud.';
+    return;
+  }
+
+  if (
+    formNueva.value.tipoClave === 'cambio' &&
+    formNueva.value.archivos.length === 0
+  ) {
+    errorNueva.value =
+      'Adjunta el archivo que se convertirá en la nueva versión.';
+    return;
+  }
+
+  const datos = new FormData();
+
+  datos.append( 'tipoClave', formNueva.value.tipoClave );
+
+  datos.append( 'documentoId', String(documentoId) );
+
+  datos.append( 'descripcion', descripcion );
+
+  for (const archivo of formNueva.value.archivos) {
+    datos.append( 'archivos', archivo );
+  }
+
+  procesandoNueva.value = true;
+  errorNueva.value = '';
+  mensaje.value = '';
+
+  try {
+    const respuesta = await api.postForm( '/solicitudes', datos );
+
+    mostrarModalNueva.value = false;
+    formNueva.value = formularioNuevaInicial();
+    vistaActual.value = 'solicitudes';
+
+    await cargarSolicitudes();
+
+    mensaje.value =
+      respuesta.mensaje ||
+      'La solicitud fue creada correctamente.';
+  } catch (err) {
+    errorNueva.value =
+      err.message ||
+      'No se pudo crear la solicitud.';
+  } finally {
+    procesandoNueva.value = false;
+  }
+}
+
 async function cargarSolicitudes() {
   cargando.value = true;
   error.value = '';
@@ -323,99 +627,481 @@ onMounted(cargarSolicitudes);
 </script>
 
 <template>
-  <div class="stack">
-    <div class="page-head">
-      <div>
-        <h1>Solicitudes</h1>
-        <p>Gestiona solicitudes de documentos y aprobación de registros.</p>
-      </div>
+  <section class="solcambio-page">
+    <div class="solcambio-page__top">
+      <h1 class="solcambio-page__title">
+        Solicitud de Cambios
+      </h1>
+
+      <span class="solcambio-page__icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
+          <rect x="9" y="3" width="6" height="4" rx="1" />
+          <path d="M20 3.5l0.5 0.5-8 8-3 1 1-3 8-8z" />
+        </svg>
+      </span>
     </div>
 
-    <p v-if="mensaje" class="estado-mensaje estado-exito">
-      {{ mensaje }}
-    </p>
+    <div class="solcambio-card">
+      <div class="solcambio-card__actions">
+        <template v-if="vistaActual === 'flujo'">
+          <button class="solcambio-btn solcambio-btn--solido" type="button" @click="abrirNuevaSolicitud">
+            <span>+</span>
+            Nueva solicitud
+          </button>
 
-    <BaseCard title="Solicitudes asignadas">
-      <p v-if="cargando" class="muted">
-        Cargando solicitudes...
-      </p>
+          <button class="solcambio-btn" type="button" @click="abrirSolicitudes">
+            <span>▥</span>
+            Solicitudes
+          </button>
+        </template>
 
-      <p v-else-if="error" class="estado-error">
-        {{ error }}
-      </p>
+        <button v-else class="solcambio-btn" type="button" @click="volverAlFlujo">
+          <span>←</span>
+          Volver al flujo
+        </button>
+      </div>
 
-      <p v-else-if="solicitudes.length === 0" class="muted">
-        No tienes solicitudes asignadas.
-      </p>
+      <template v-if="vistaActual === 'flujo'">
+        <h2 class="solcambio-flow__title">
+          Flujo de solicitud de cambios
+        </h2>
 
-      <div v-else class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>FOLIO</th>
-              <th>DOCUMENTO</th>
-              <th>TIPO</th>
-              <th>VERSIÓN / FECHA</th>
-              <th>SOLICITANTE</th>
-              <th>ESTADO</th>
-              <th>ACCIONES</th>
-            </tr>
-          </thead>
+        <div class="solcambio-flow">
+          <div class="solcambio-flow__col">
+            <button class="solcambio-step solcambio-step--arrow" :class="{
+              'solcambio-step--active': etapaActiva === 1
+            }" type="button" @mouseenter="activarEtapa(1)" @mouseleave="desactivarEtapa">
+              <svg class="solcambio-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 16V6" />
+                <path d="M8 10l4-4 4 4" />
+                <path d="M5 18h14" />
+              </svg>
 
-          <tbody>
-            <tr v-for="solicitud in solicitudes" :key="solicitud.id">
-              <td>
-                <code>SOL-{{ solicitud.id }}</code>
-              </td>
+              <span class="solcambio-step__text">
+                Registrar<br />
+                documento
+              </span>
+            </button>
 
-              <td>
-                <strong>{{ solicitud.documento }}</strong>
-              </td>
+            <span class="solcambio-connector">
+              <span class="solcambio-connector__line"></span>
+              <span class="solcambio-connector__dot"></span>
+            </span>
 
-              <td>{{ solicitud.tipo_solicitud }}</td>
+            <span class="solcambio-flow__role">
+              Solicitante
+            </span>
+          </div>
 
-              <td>
-                <template v-if="solicitud.es_registro">
-                  {{ formatearFecha(solicitud.fecha_registro) }}
-                </template>
+          <span class="solcambio-flow__arrow">→</span>
 
-                <template v-else>
-                  v{{ solicitud.version }}
-                </template>
-              </td>
+          <div class="solcambio-flow__col">
+            <button class="solcambio-step solcambio-step--arrow" :class="{
+              'solcambio-step--active': etapaActiva === 2
+            }" type="button" @mouseenter="activarEtapa(2)" @mouseleave="desactivarEtapa">
+              <svg class="solcambio-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h11" />
+                <path d="M12 4l3 3-3 3" />
+                <path d="M20 17H9" />
+                <path d="M12 20l-3-3 3-3" />
+              </svg>
 
-              <td>{{ solicitud.solicitante }}</td>
+              <span class="solcambio-step__text">
+                Solicitar cambio<br />
+                o baja
+              </span>
+            </button>
 
-              <td>
-                <StatusBadge :estado="solicitud.estado" />
-              </td>
+            <span class="solcambio-connector">
+              <span class="solcambio-connector__line"></span>
+              <span class="solcambio-connector__dot"></span>
+            </span>
 
-              <td>
-                <button class="btn btn-ghost btn-sm" type="button" :disabled="Boolean(accionArchivo)"
-                  @click="verPdf(solicitud)">
-                  <AppIcon name="search" :size="14" />
+            <span class="solcambio-flow__role">
+              Solicitante
+            </span>
+          </div>
 
+          <span class="solcambio-flow__arrow">→</span>
+
+          <div class="solcambio-flow__col">
+            <button class="solcambio-step solcambio-step--arrow" :class="{
+              'solcambio-step--active': etapaActiva === 3
+            }" type="button" @mouseenter="activarEtapa(3)" @mouseleave="desactivarEtapa">
+              <svg class="solcambio-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="10" cy="10" r="6" />
+                <line x1="14.5" y1="14.5" x2="20" y2="20" />
+              </svg>
+
+              <span class="solcambio-step__text">
+                Revisión de<br />
+                la solicitud
+              </span>
+            </button>
+
+            <span class="solcambio-connector">
+              <span class="solcambio-connector__line"></span>
+              <span class="solcambio-connector__dot"></span>
+            </span>
+
+            <span class="solcambio-flow__role">
+              Revisor
+            </span>
+          </div>
+
+          <span class="solcambio-flow__arrow">→</span>
+
+          <div class="solcambio-flow__col">
+            <button class="solcambio-step solcambio-step--decision" :class="{
+              'solcambio-step--active': etapaActiva === 4
+            }" type="button" @mouseenter="activarEtapa(4)" @mouseleave="desactivarEtapa">
+              <svg class="solcambio-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 12l2 2 4-4" />
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+
+              <span class="solcambio-step__text">
+                ¿Se aprueba<br />
+                el cambio?
+              </span>
+            </button>
+
+            <span class="solcambio-connector">
+              <span class="solcambio-connector__line"></span>
+              <span class="solcambio-connector__dot"></span>
+            </span>
+
+            <span class="solcambio-flow__role">
+              Aprobador
+            </span>
+          </div>
+
+          <span class="solcambio-flow__arrow">→</span>
+
+          <div class="solcambio-branch">
+            <div class="solcambio-branch__row">
+              <span class="solcambio-branch__arrow">→</span>
+
+              <div class="solcambio-branch__col">
+                <div class=" solcambio-finish solcambio-finish--aprobado">
+                  <strong>
+                    <span class="solcambio-finish__tag">✓</span>
+                    Registro actualizado
+                  </strong>
+
+                  <span>
+                    Sí: el documento y el registro quedan actualizados
+                  </span>
+                </div>
+
+                <span class="solcambio-flow__role">
+                  Automático
+                </span>
+              </div>
+            </div>
+
+            <div class="solcambio-branch__row">
+              <span class="solcambio-branch__arrow">→</span>
+
+              <div class="solcambio-branch__col">
+                <div class="solcambio-finish solcambio-finish--rechazado">
+                  <strong>
+                    <span class="solcambio-finish__tag">✕</span>
+                    Solicitud rechazada
+                  </strong>
+
+                  <span>
+                    No: la solicitud se cierra y regresa al solicitante
+                  </span>
+                </div>
+
+                <span class="solcambio-flow__role">
+                  Solicitante
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template v-else>
+        <h2 class="solcambio-flow__title">
+          Selecciona una solicitud para ver su detalle
+        </h2>
+
+        <p v-if="mensaje" class="estado-mensaje estado-exito">
+          {{ mensaje }}
+        </p>
+
+        <p v-if="cargando" class="solcambio-empty">
+          Cargando solicitudes...
+        </p>
+
+        <p v-else-if="error" class="estado-mensaje estado-error">
+          {{ error }}
+        </p>
+
+        <div v-else-if="solicitudes.length === 0" class="solcambio-empty">
+          No tienes solicitudes asignadas.
+        </div>
+
+        <div v-else class="solcambio-lista">
+          <article v-for="solicitud in solicitudes" :key="solicitud.id" class="solcambio-item">
+            <div class="solcambio-item__main">
+              <strong>
+                SOL-{{ solicitud.id }} ·
+                {{ solicitud.documento }}
+              </strong>
+
+              <span class="solcambio-item__sub">
+                {{ solicitud.tipo_solicitud }} ·
+                {{ solicitud.solicitante }}
+              </span>
+
+              <span v-if="solicitud.proceso" class="solcambio-item__sub">
+                Proceso: {{ solicitud.proceso }}
+              </span>
+
+              <span class="solcambio-item__asignacion">
+                {{ textoAsignacion(solicitud) }}
+              </span>
+
+              <span v-if="solicitud.descripcion" class="solcambio-item__descripcion">
+                {{ solicitud.descripcion }}
+              </span>
+
+              <div v-if="solicitud.archivos?.length" class="solcambio-item__archivos">
+                <button v-for="archivo in solicitud.archivos" :key="archivo.id" class="btn btn-ghost btn-sm"
+                  type="button" :disabled="Boolean(accionArchivo)"
+                  @click="descargarArchivoSolicitud(solicitud, archivo)">
+                  <AppIcon name="file" :size="14" />
                   {{
-                    accionArchivo ===
-                      `${solicitud.es_registro ? 'registro' : 'pdf'}-${solicitud.id}`
-                      ? solicitud.es_registro
-                        ? 'Descargando...'
-                        : 'Abriendo...'
-                      : solicitud.es_registro
-                        ? 'Descargar evidencia'
-                        : 'Ver PDF'
+                    accionArchivo === `solicitud-${archivo.id}`
+                      ? 'Descargando...'
+                      : archivo.nombre_archivo
                   }}
                 </button>
-                <button v-if="solicitud.puede_atender" class="btn btn-primary btn-sm" type="button"
-                  :disabled="Boolean(accionArchivo)" @click="abrirDecision(solicitud)">
-                  Atender
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </div>
+            </div>
+
+            <div class="solcambio-item__meta">
+              <span class="solcambio-badge" :class="claseEstado(solicitud.estado)">
+                {{ etiquetaEstado(solicitud.estado) }}
+              </span>
+
+              <span class="solcambio-item__fecha">
+                {{ formatearFecha(solicitud.creado_en) }}
+              </span>
+
+              <button class="btn btn-ghost btn-sm" type="button" :disabled="Boolean(accionArchivo)"
+                @click="verPdf(solicitud)">
+                <AppIcon name="search" :size="14" />
+
+                {{
+                  accionArchivo ===
+                    `${solicitud.es_registro
+                      ? 'registro'
+                      : 'pdf'}-${solicitud.id}`
+                    ? solicitud.es_registro
+                      ? 'Descargando...'
+                      : 'Abriendo...'
+                    : solicitud.es_registro
+                      ? 'Descargar evidencia'
+                      : 'Ver PDF'
+                }}
+              </button>
+
+              <button v-if="solicitud.puede_atender" class="btn btn-primary btn-sm" type="button"
+                :disabled="Boolean(accionArchivo)" @click="abrirDecision(solicitud)">
+                Atender
+              </button>
+
+              <span v-if="solicitud.puede_atender" class="solcambio-item__arrow">
+                ›
+              </span>
+            </div>
+          </article>
+        </div>
+      </template>
+    </div>
+
+    <div v-if="mostrarModalNueva" class="solcambio-modal-overlay" @click.self="cerrarNuevaSolicitud">
+      <div class="solcambio-modal" role="dialog" aria-modal="true" aria-labelledby="titulo-nueva-solicitud">
+        <div class="solcambio-modal__header">
+          <h2 id="titulo-nueva-solicitud" class="solcambio-modal__title">
+            Nueva solicitud de cambio
+          </h2>
+
+          <button class="solcambio-modal__close" type="button" aria-label="Cerrar" :disabled="procesandoNueva"
+            @click="cerrarNuevaSolicitud">
+            ×
+          </button>
+        </div>
+
+        <form @submit.prevent="guardarNuevaSolicitud">
+          <div class="solcambio-modal__body">
+            <p v-if="cargandoCatalogos" class="solcambio-empty">
+              Cargando datos del formulario...
+            </p>
+
+            <template v-else>
+              <div class="solcambio-form">
+                <div class="solcambio-form-field">
+                  <label for="tipo-nueva-solicitud">
+                    Tipo de solicitud
+                  </label>
+
+                  <select id="tipo-nueva-solicitud" v-model="formNueva.tipoClave" class="solcambio-select" required
+                    :disabled="procesandoNueva">
+                    <option value="alta">
+                      Alta de nuevo documento
+                    </option>
+
+                    <option value="cambio">
+                      Modificación de documento existente
+                    </option>
+
+                    <option value="baja">
+                      Baja de documento
+                    </option>
+                  </select>
+                </div>
+
+                <div class="solcambio-form-field">
+                  <label for="documento-nueva-solicitud">
+                    Nombre del documento
+                  </label>
+
+                  <input v-if="formNueva.tipoClave === 'alta'" id="documento-nueva-solicitud"
+                    v-model="formNueva.nombreDocumento" class="solcambio-input" type="text" maxlength="200" required
+                    :disabled="procesandoNueva" placeholder="Ej. Procedimiento de control de calidad" />
+
+                  <select v-else id="documento-nueva-solicitud" v-model="formNueva.documentoId" class="solcambio-select"
+                    required :disabled="procesandoNueva">
+                    <option value="" disabled>
+                      Selecciona un documento vigente
+                    </option>
+
+                    <option v-for="documento in documentosDisponibles" :key="documento.id" :value="documento.id">
+                      {{ documento.codigo }} · {{ documento.nombre }}
+                    </option>
+                  </select>
+
+                  <span v-if="
+                    formNueva.tipoClave !== 'alta' &&
+                    documentosDisponibles.length === 0
+                  " class="solcambio-form-hint">
+                    No hay documentos vigentes disponibles.
+                  </span>
+                </div>
+
+                <div class="solcambio-row">
+                  <div class="solcambio-form-field">
+                    <label for="proceso-nueva-solicitud">
+                      Área / proceso
+                    </label>
+
+                    <select v-if="formNueva.tipoClave === 'alta'" id="proceso-nueva-solicitud"
+                      v-model="formNueva.procesoId" class="solcambio-select" required :disabled="procesandoNueva">
+                      <option value="" disabled>
+                        Selecciona un proceso
+                      </option>
+
+                      <option v-for="proceso in procesosDisponibles" :key="proceso.id" :value="proceso.id">
+                        {{ proceso.nombre }}
+                      </option>
+                    </select>
+
+                    <input v-else id="proceso-nueva-solicitud" class="solcambio-input" type="text" readonly :value="documentoSeleccionado?.proceso ||
+                      'Selecciona un documento'
+                      " />
+                  </div>
+
+                  <div class="solcambio-form-field">
+                    <label for="solicitante-nueva-solicitud">
+                      Solicitante
+                    </label>
+
+                    <input id="solicitante-nueva-solicitud" class="solcambio-input" type="text" readonly
+                      :value="formNueva.solicitante" placeholder="Nombre de quien solicita" />
+                  </div>
+                </div>
+
+                <div class="solcambio-form-field">
+                  <label for="descripcion-nueva-solicitud">
+                    Descripción de la solicitud
+                  </label>
+
+                  <textarea id="descripcion-nueva-solicitud" v-model="formNueva.descripcion" class="solcambio-textarea"
+                    maxlength="2000" required :disabled="procesandoNueva"
+                    placeholder="Describe el cambio, motivo o alcance de la baja"></textarea>
+                </div>
+
+                <div v-if="formNueva.tipoClave !== 'alta'" class="solcambio-form-field">
+                  <label for="archivos-nueva-solicitud">
+                    Adjuntar archivo(s)
+                  </label>
+
+                  <input id="archivos-nueva-solicitud" class="solcambio-file-input" type="file" multiple
+                    :disabled="procesandoNueva" @change="seleccionarArchivos" />
+
+                  <span v-if="formNueva.archivos.length" class="solcambio-form-hint">
+                    {{
+                      formNueva.archivos
+                        .map(archivo => archivo.name)
+                        .join(', ')
+                    }}
+                  </span>
+
+                  <span class="solcambio-form-hint">
+                    {{
+                      formNueva.tipoClave === 'cambio'
+                        ? 'El primer archivo será la nueva versión del documento; los demás quedarán como evidencia.'
+                        : 'Puedes adjuntar evidencia que justifique la baja.'
+                    }}
+                  </span>
+                </div>
+
+                <span v-else class="solcambio-form-hint">
+                  El archivo principal se seleccionará en Control de Documentos.
+                </span>
+
+                <span v-if="errorNueva" class="solcambio-form-error">
+                  {{ errorNueva }}
+                </span>
+              </div>
+            </template>
+          </div>
+
+          <div class="solcambio-modal__footer">
+            <button class="solcambio-btn-cancelar" type="button" :disabled="procesandoNueva"
+              @click="cerrarNuevaSolicitud">
+              Cancelar
+            </button>
+
+            <button class="solcambio-btn-cerrar" type="submit" :disabled="cargandoCatalogos ||
+              procesandoNueva ||
+              (
+                formNueva.tipoClave !== 'alta' &&
+                documentosDisponibles.length === 0
+              )
+              ">
+              {{
+                procesandoNueva
+                  ? 'Creando...'
+                  : 'Crear solicitud'
+              }}
+            </button>
+          </div>
+        </form>
       </div>
-    </BaseCard>
+    </div>
     <div v-if="decisionAbierta" class="overlay" @click.self="cerrarDecision">
       <div class="modal">
         <div class="modal-head">
@@ -435,7 +1121,7 @@ onMounted(cargarSolicitudes);
         <div class="modal-body">
           <label v-if="
             solicitudSeleccionada?.estado === 'en_aprobador' &&
-            !solicitudSeleccionada?.es_registro
+            solicitudSeleccionada?.tipo_clave === 'alta'
           " class="campo">
             <span>Código institucional *</span>
 
@@ -470,7 +1156,10 @@ onMounted(cargarSolicitudes);
               Cancelar
             </button>
 
-            <button class="btn btn-ghost" type="button" :disabled="procesandoDecision" @click="devolverSeleccionada">
+            <button v-if="
+              solicitudSeleccionada?.es_registro ||
+              solicitudSeleccionada?.tipo_clave === 'alta'
+            " class="btn btn-ghost" type="button" :disabled="procesandoDecision" @click="devolverSeleccionada">
               {{
                 procesandoDecision
                   ? 'Procesando...'
@@ -505,15 +1194,23 @@ onMounted(cargarSolicitudes);
                   ? 'Aprobando...'
                   : solicitudSeleccionada?.es_registro
                     ? 'Aprobar registro'
-                    : 'Aprobar y publicar'
+                    : solicitudSeleccionada?.tipo_clave === 'baja'
+                      ? 'Aprobar baja'
+                      : solicitudSeleccionada?.tipo_clave === 'cambio'
+                        ? 'Aprobar nueva versión'
+                        : 'Aprobar y publicar'
               }}
             </button>
           </div>
         </div>
       </div>
     </div>
-  </div>
+  </section>
 </template>
+
+<style>
+@import '@/assets/styles/SolicitudCambios.css';
+</style>
 
 <style scoped>
 .empty {

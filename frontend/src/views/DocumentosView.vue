@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/api/client.js';
 import { useAuthStore } from '@/stores/auth.js';
 import AppIcon from '@/components/AppIcon.vue';
@@ -7,6 +8,8 @@ import BaseCard from '@/components/BaseCard.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 
 const auth = useAuthStore();
+const route = useRoute();
+const router = useRouter();
 const documentos = ref([]);
 const tiposDocumento = ref([]);
 const procesos = ref([]);
@@ -44,6 +47,7 @@ const mensaje = ref('');
 const error = ref('');
 const archivoInput = ref(null);
 const accionArchivo = ref('');
+const descripcionAltaPendiente = ref('');
 
 const revisionAbierta = ref(false);
 const documentoRevision = ref(null);
@@ -195,8 +199,43 @@ function limpiarFormulario() {
 
 function abrirFormulario() {
   error.value = '';
+  descripcionAltaPendiente.value = '';
   limpiarFormulario();
   formularioAbierto.value = true;
+}
+
+function abrirAltaDesdeSolicitud() {
+  if (
+    route.query.nuevo !== '1' ||
+    !puedeIniciarFlujo.value
+  ) {
+    return;
+  }
+
+  abrirFormulario();
+
+  formulario.value.nombre =
+    String(route.query.nombre || '').trim();
+
+  descripcionAltaPendiente.value =
+    String(route.query.descripcion || '').trim();
+
+  const procesoId =
+    Number(route.query.procesoId);
+
+  const procesoCoincidente =
+    procesos.value.find(
+      proceso =>
+        Number(proceso.id) === procesoId &&
+        proceso.estatus === 'activo',
+    );
+
+  formulario.value.proceso_id =
+    procesoCoincidente?.id || '';
+
+  router.replace({
+    name: 'documentos',
+  });
 }
 
 function cerrarFormulario() {
@@ -206,6 +245,7 @@ function cerrarFormulario() {
 
   formularioAbierto.value = false;
   error.value = '';
+  descripcionAltaPendiente.value = '';
   limpiarFormulario();
 }
 
@@ -320,7 +360,7 @@ async function guardarDocumento() {
         Number(formulario.value.tipo_documento_id),
     );
 
-    documentos.value.unshift({
+    const documentoCreado = {
       id: documento.id,
       codigo: documento.codigo || 'Pendiente',
       nombre: documento.nombre,
@@ -331,11 +371,23 @@ async function guardarDocumento() {
       version: documento.version_actual.version,
       origen: documento.origen,
       estado: documento.estado,
-    });
+    };
+
+    documentos.value.unshift(documentoCreado);
 
     mensaje.value = respuesta.mensaje;
     formularioAbierto.value = false;
     limpiarFormulario();
+
+    if (descripcionAltaPendiente.value) {
+      const comentarioSolicitud =
+        descripcionAltaPendiente.value;
+
+      descripcionAltaPendiente.value = '';
+      abrirRevision(documentoCreado);
+      formularioRevision.value.comentario =
+        comentarioSolicitud;
+    }
   } catch (err) {
     error.value =
       err.message || 'No se pudo guardar el documento.';
@@ -424,6 +476,7 @@ async function cargarCatalogos() {
 
 onMounted(async () => {
   await cargarCatalogos();
+  abrirAltaDesdeSolicitud();
 });
 </script>
 

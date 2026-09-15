@@ -1,34 +1,32 @@
-import path from 'node:path';
-import multer from 'multer';
+import path from "node:path";
+import multer from "multer";
 
 const TAMANO_MAXIMO = 25 * 1024 * 1024;
 
 const TIPOS_PERMITIDOS = new Map([
-    ['.pdf', ['application/pdf']],
-    ['.doc', ['application/msword']],
+    [".pdf", ["application/pdf"]],
+    [".doc", ["application/msword"]],
     [
-        '.docx',
+        ".docx",
         [
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ],
     ],
-    ['.xls', ['application/vnd.ms-excel']],
+    [".xls", ["application/vnd.ms-excel"]],
     [
-        '.xlsx',
+        ".xlsx",
+        ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+    ],
+    [".ppt", ["application/vnd.ms-powerpoint"]],
+    [
+        ".pptx",
         [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         ],
     ],
-    ['.ppt', ['application/vnd.ms-powerpoint']],
-    [
-        '.pptx',
-        [
-            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        ],
-    ],
-    ['.png', ['image/png']],
-    ['.jpg', ['image/jpeg']],
-    ['.jpeg', ['image/jpeg']],
+    [".png", ["image/png"]],
+    [".jpg", ["image/jpeg"]],
+    [".jpeg", ["image/jpeg"]],
 ]);
 
 function crearErrorCarga(mensaje) {
@@ -45,7 +43,7 @@ function validarArchivo(_req, archivo, callback) {
     if (!tiposMime || !tiposMime.includes(archivo.mimetype)) {
         return callback(
             crearErrorCarga(
-                'Formato no permitido. Usa PDF, Word, Excel, PowerPoint, PNG o JPEG.',
+                "Formato no permitido. Usa PDF, Word, Excel, PowerPoint, PNG o JPEG.",
             ),
         );
     }
@@ -67,25 +65,69 @@ const carga = multer({
     },
 });
 
+const cargaSolicitudes = multer({
+    storage: multer.memoryStorage(),
+    fileFilter: validarArchivo,
+    limits: {
+        fileSize: TAMANO_MAXIMO,
+        files: 5,
+        fields: 10,
+        parts: 15,
+        fieldNameSize: 100,
+        fieldSize: 1024 * 1024,
+        fieldArrayIndexLimit: 10,
+    },
+});
+
 export function subirDocumento(req, res, next) {
-    carga.single('archivo')(req, res, (error) => {
+    carga.single("archivo")(req, res, (error) => {
         if (!error) {
             return next();
         }
 
         if (error instanceof multer.MulterError) {
             const mensajes = {
-                LIMIT_FILE_SIZE: 'El archivo supera el límite de 25 MB.',
-                LIMIT_FILE_COUNT: 'Solo se permite subir un archivo.',
+                LIMIT_FILE_SIZE: "El archivo supera el límite de 25 MB.",
+                LIMIT_FILE_COUNT: "Solo se permite subir un archivo.",
                 LIMIT_UNEXPECTED_FILE:
-                    'El formulario contiene un archivo no esperado.',
-                LIMIT_FIELD_COUNT: 'El formulario contiene demasiados campos.',
-                LIMIT_PART_COUNT: 'El formulario contiene demasiadas partes.',
+                    "El formulario contiene un archivo no esperado.",
+                LIMIT_FIELD_COUNT: "El formulario contiene demasiados campos.",
+                LIMIT_PART_COUNT: "El formulario contiene demasiadas partes.",
             };
 
             return next(
                 crearErrorCarga(
-                    mensajes[error.code] || 'No se pudo procesar el archivo enviado.',
+                    mensajes[error.code] ||
+                        "No se pudo procesar el archivo enviado.",
+                ),
+            );
+        }
+
+        next(error);
+    });
+}
+
+export function subirArchivosSolicitud(req, res, next) {
+    cargaSolicitudes.array("archivos", 5)(req, res, (error) => {
+        if (!error) {
+            return next();
+        }
+
+        if (error instanceof multer.MulterError) {
+            const mensajes = {
+                LIMIT_FILE_SIZE:
+                    "Uno de los archivos supera el límite de 25 MB.",
+                LIMIT_FILE_COUNT: "Solo se permiten hasta cinco archivos.",
+                LIMIT_UNEXPECTED_FILE:
+                    "El formulario contiene un archivo no esperado.",
+                LIMIT_FIELD_COUNT: "El formulario contiene demasiados campos.",
+                LIMIT_PART_COUNT: "El formulario contiene demasiadas partes.",
+            };
+
+            return next(
+                crearErrorCarga(
+                    mensajes[error.code] ||
+                        "No se pudieron procesar los archivos enviados.",
                 ),
             );
         }
