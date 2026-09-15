@@ -2,8 +2,8 @@
 #  Entorno local de WEB 360 de Calidad
 #  Levanta PostgreSQL + Adminer (visor web de la BD) con un
 #  solo comando:  docker compose up -d
-#  Las migraciones de database/migrations se ejecutan solas
-#  la primera vez que se crea el volumen.
+#  El backend revisa y aplica automáticamente las migraciones
+#  nuevas cada vez que inicia, sin borrar los datos existentes.
 # ============================================================
 services:
   db:
@@ -28,8 +28,9 @@ services:
       - ./database/migrations/008_flujo_documental.sql:/docker-entrypoint-initdb.d/008_flujo_documental.sql:ro
       - ./database/migrations/009_correcciones_documentales.sql:/docker-entrypoint-initdb.d/009_correcciones_documentales.sql:ro
       - ./database/migrations/010_almacen_registros.sql:/docker-entrypoint-initdb.d/010_almacen_registros.sql:ro
-      - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/011_catalogos.sql:ro
-      - ./database/seeds/002_unidades_medida.sql:/docker-entrypoint-initdb.d/012_unidades_medida.sql:ro
+      - ./database/migrations/011_solicitudes_cambio_baja.sql:/docker-entrypoint-initdb.d/011_solicitudes_cambio_baja.sql:ro
+      - ./database/seeds/001_catalogos.sql:/docker-entrypoint-initdb.d/012_catalogos.sql:ro
+      - ./database/seeds/002_unidades_medida.sql:/docker-entrypoint-initdb.d/013_unidades_medida.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -53,7 +54,8 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/dockerfile
     container_name: web360_backend
     environment:
       BACKEND_PORT: 3000
@@ -69,6 +71,7 @@ services:
       - "3000:3000"
     volumes:
       - ./backend:/app
+      - ./database/migrations:/app/database/migrations:ro
       - backend_node_modules:/app/node_modules
       - web360_archivos:/app/storage
 

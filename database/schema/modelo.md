@@ -5,10 +5,10 @@ Este documento acompaña a `migrations/001_esquema_inicial.sql`. El esquema es u
 
 ## Cómo aplicar el esquema
 
-Con Docker (recomendado, desde la raíz del repo):
+Con Docker (recomendado, desde la raíz del repositorio):
 
 ```bash
-docker compose up -d          # crea la BD y corre migrations + seeds la 1ª vez
+docker compose up -d          # crea la BD y aplica las migraciones pendientes
 ```
 
 Adminer queda disponible en http://localhost:8080
@@ -37,7 +37,10 @@ psql "$DATABASE_URL" -f database/seeds/001_catalogos.sql
 
 - Un archivo por cambio, numerado: `002_...`, `003_...`, siempre incremental.
 - Nunca editar una migración ya aplicada en `main`; crear una nueva.
-- Cada migración debe poder correrse una sola vez y en orden.
+- Desde la migración `011`, el backend ejecuta automáticamente los archivos
+  pendientes y los registra en la tabla `schema_migrations`.
+- Cada migración automática se ejecuta una sola vez, en orden y dentro de una
+  transacción.
 
 ## Puntos abiertos (ver anexo de diagramas)
 

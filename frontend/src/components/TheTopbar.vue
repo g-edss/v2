@@ -25,6 +25,10 @@ const titulos = {
   solicitudes: 'Solicitudes', auditorias: 'Auditorías', juntas: 'Juntas',
   usuarios: 'Usuarios',
   auditores: 'Auditores',
+  indicadores: 'Indicadores',
+  tipoIndicador: 'Tipos de Indicador',
+  unidadMedida: 'Unidades de Medida',
+  accionesCorrectivas: 'Acciones Correctivas',
 };
 
 const titulo = computed(() => titulos[route.name] || 'WEB 360 de Calidad');
