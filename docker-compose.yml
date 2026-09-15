@@ -2,8 +2,8 @@
 #  Entorno local de WEB 360 de Calidad
 #  Levanta PostgreSQL + Adminer (visor web de la BD) con un
 #  solo comando:  docker compose up -d
-#  Las migraciones de database/migrations se ejecutan solas
-#  la primera vez que se crea el volumen.
+#  El backend revisa y aplica automáticamente las migraciones
+#  nuevas cada vez que inicia, sin borrar los datos existentes.
 # ============================================================
 services:
   db:
@@ -54,7 +54,8 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/dockerfile
     container_name: web360_backend
     environment:
       BACKEND_PORT: 3000
@@ -70,6 +71,7 @@ services:
       - "3000:3000"
     volumes:
       - ./backend:/app
+      - ./database/migrations:/app/database/migrations:ro
       - backend_node_modules:/app/node_modules
       - web360_archivos:/app/storage
 
